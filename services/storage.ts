@@ -1,15 +1,15 @@
 
 import { PDFBook, AccessKey, Collection } from '../types';
+import { DB } from './db';
 
 const STORAGE_KEYS = {
-  BOOKS: 'pdf_vault_books',
   KEYS: 'pdf_vault_keys',
   COLLECTIONS: 'pdf_vault_collections',
   ADMIN_PASS: 'pdf_vault_admin_pass'
 };
 
 export const StorageService = {
-  // Collections
+  // Collections (Keep in LocalStorage)
   getCollections: (): Collection[] => {
     const data = localStorage.getItem(STORAGE_KEYS.COLLECTIONS);
     return data ? JSON.parse(data) : [];
@@ -25,37 +25,48 @@ export const StorageService = {
     return newCol;
   },
 
-  // Books
-  getBooks: (): PDFBook[] => {
-    const data = localStorage.getItem(STORAGE_KEYS.BOOKS);
-    return data ? JSON.parse(data) : [];
+  // Books (Move to IndexedDB)
+  getBooks: async (): Promise<PDFBook[]> => {
+    return await DB.getAllBooks();
   },
-  saveBook: (book: Omit<PDFBook, 'id' | 'createdAt'>) => {
-    const books = StorageService.getBooks();
+  getBookById: async (id: string): Promise<PDFBook | undefined> => {
+    return await DB.getBook(id);
+  },
+  saveBook: async (book: Omit<PDFBook, 'id' | 'createdAt'>) => {
     const newBook: PDFBook = {
       ...book,
       id: crypto.randomUUID(),
+      sourceType: book.sourceType || 'FILE', // Default to FILE for backward compatibility
       createdAt: Date.now()
     };
-    localStorage.setItem(STORAGE_KEYS.BOOKS, JSON.stringify([...books, newBook]));
+    await DB.addBook(newBook);
     return newBook;
   },
-  deleteBook: (id: string) => {
-    const books = StorageService.getBooks().filter(b => b.id !== id);
-    localStorage.setItem(STORAGE_KEYS.BOOKS, JSON.stringify(books));
+  deleteBook: async (id: string) => {
+    await DB.deleteBook(id);
     // Also cleanup keys
     const keys = StorageService.getKeys().filter(k => k.bookId !== id);
     localStorage.setItem(STORAGE_KEYS.KEYS, JSON.stringify(keys));
   },
 
-  // Keys
+  // Keys (Keep in LocalStorage for fast lookup, but sync with async books logic in UI)
   getKeys: (): AccessKey[] => {
     const data = localStorage.getItem(STORAGE_KEYS.KEYS);
     return data ? JSON.parse(data) : [];
   },
   saveKey: (key: string, bookId: string, limit: number = 2) => {
     const keys = StorageService.getKeys();
-    // Allow multiple keys per book or update existing
+
+    // Check if key already exists, if so, ensure unique or update? 
+    // For now, allow multiple same keys or unique? Assume unique key string for login.
+    // If key exists, do not duplicate, just update
+    const existingIndex = keys.findIndex(k => k.key === key);
+    if (existingIndex >= 0) {
+      // Prevent duplicate keys globally for simplicity in login
+      alert('Bu şifre zaten kullanımda!');
+      throw new Error("Key exists");
+    }
+
     const newKey: AccessKey = {
       id: crypto.randomUUID(),
       key,
@@ -67,14 +78,14 @@ export const StorageService = {
     return newKey;
   },
   updateKeyCount: (keyId: string) => {
-    const keys = StorageService.getKeys().map(k => 
+    const keys = StorageService.getKeys().map(k =>
       k.id === keyId ? { ...k, printCount: k.printCount + 1 } : k
     );
     localStorage.setItem(STORAGE_KEYS.KEYS, JSON.stringify(keys));
   },
   updateKeyPassword: (keyId: string, newPassword: string) => {
-    const keys = StorageService.getKeys().map(k => 
-        k.id === keyId ? { ...k, key: newPassword } : k
+    const keys = StorageService.getKeys().map(k =>
+      k.id === keyId ? { ...k, key: newPassword } : k
     );
     localStorage.setItem(STORAGE_KEYS.KEYS, JSON.stringify(keys));
   },

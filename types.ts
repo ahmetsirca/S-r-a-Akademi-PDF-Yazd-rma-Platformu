@@ -3,7 +3,9 @@ export interface PDFBook {
   id: string;
   name: string;
   collectionId: string;
-  pdfData: string; // Base64 or Blob URL
+  pdfData?: string; // Base64 for files
+  sourceUrl?: string; // URL for links
+  sourceType: 'FILE' | 'LINK';
   createdAt: number;
 }
 
