@@ -30,19 +30,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
   const refreshData = async () => {
     setIsLoading(true);
-    setCollections(StorageService.getCollections());
+    setCollections(await StorageService.getCollections());
     const booksData = await StorageService.getBooks();
     setBooks(booksData);
-    setKeys(StorageService.getKeys());
+    setKeys(await StorageService.getKeys());
     setIsLoading(false);
   };
 
-  const handleCreateCollection = (e: React.FormEvent) => {
+  const handleCreateCollection = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newColName) return;
-    StorageService.saveCollection(newColName);
+    await StorageService.saveCollection(newColName);
     setNewColName('');
-    refreshData(); // Sync, can be instant
+    await refreshData();
   };
 
   const handleUploadBook = async (e: React.FormEvent) => {
@@ -97,7 +97,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const saveBookAndRefresh = async (bookData: any) => {
     try {
       const savedBook = await StorageService.saveBook(bookData);
-      StorageService.saveKey(newBookPass, savedBook.id, 2);
+      await StorageService.saveKey(newBookPass, savedBook.id, 2);
 
       setNewBookName('');
       setNewBookPass('');
@@ -122,12 +122,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     }
   };
 
-  const handleUpdateKey = (keyId: string) => {
+  const handleUpdateKey = async (keyId: string) => {
     if (!newKeyPass) return;
-    StorageService.updateKeyPassword(keyId, newKeyPass);
+    await StorageService.updateKeyPassword(keyId, newKeyPass);
     setEditKeyId(null);
     setNewKeyPass('');
-    refreshData();
+    await refreshData();
   };
 
   return (

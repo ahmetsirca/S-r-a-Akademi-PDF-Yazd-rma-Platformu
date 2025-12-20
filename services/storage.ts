@@ -1,96 +1,160 @@
 
+import { supabase } from './supabase';
 import { PDFBook, AccessKey, Collection } from '../types';
-import { DB } from './db';
-
-const STORAGE_KEYS = {
-  KEYS: 'pdf_vault_keys',
-  COLLECTIONS: 'pdf_vault_collections',
-  ADMIN_PASS: 'pdf_vault_admin_pass'
-};
 
 export const StorageService = {
-  // Collections (Keep in LocalStorage)
-  getCollections: (): Collection[] => {
-    const data = localStorage.getItem(STORAGE_KEYS.COLLECTIONS);
-    return data ? JSON.parse(data) : [];
-  },
-  saveCollection: (name: string) => {
-    const collections = StorageService.getCollections();
-    const newCol: Collection = {
-      id: crypto.randomUUID(),
-      name,
-      createdAt: Date.now()
-    };
-    localStorage.setItem(STORAGE_KEYS.COLLECTIONS, JSON.stringify([...collections, newCol]));
-    return newCol;
+  // Collections
+  getCollections: async (): Promise<Collection[]> => {
+    const { data } = await supabase.from('collections').select('*');
+    return data || [];
   },
 
-  // Books (Move to IndexedDB)
+  saveCollection: async (name: string): Promise<Collection> => {
+    const { data, error } = await supabase.from('collections').insert({ name }).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  deleteCollection: async (id: string) => {
+    await supabase.from('collections').delete().eq('id', id);
+  },
+
+  // Books
   getBooks: async (): Promise<PDFBook[]> => {
-    return await DB.getAllBooks();
+    const { data } = await supabase.from('pdf_books').select('*');
+    return (data || []).map((b: any) => ({
+      id: b.id,
+      name: b.name,
+      collectionId: b.collection_id,
+      sourceType: b.source_type,
+      // Map file_path to pdfData so existing UI works without change
+      pdfData: b.file_path,
+      sourceUrl: b.file_path,
+      createdAt: new Date(b.created_at).getTime()
+    }));
   },
-  getBookById: async (id: string): Promise<PDFBook | undefined> => {
-    return await DB.getBook(id);
-  },
+
   saveBook: async (book: Omit<PDFBook, 'id' | 'createdAt'>) => {
-    const newBook: PDFBook = {
-      ...book,
-      id: crypto.randomUUID(),
-      sourceType: book.sourceType || 'FILE', // Default to FILE for backward compatibility
-      createdAt: Date.now()
+    let filePath = book.sourceUrl || '';
+
+    // If it's a FILE upload (Base64 data coming from UI)
+    if (book.sourceType === 'FILE' && book.pdfData && book.pdfData.startsWith('data:')) {
+      const base64Response = await fetch(book.pdfData);
+      const blob = await base64Response.blob();
+
+      // Sanitized filename
+      const safeName = book.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const fileName = `${Date.now()}_${safeName}.pdf`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('sirca-pdfs')
+        .upload(fileName, blob);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('sirca-pdfs')
+        .getPublicUrl(fileName);
+
+      filePath = publicUrl;
+    }
+
+    const { data, error } = await supabase.from('pdf_books').insert({
+      name: book.name,
+      collection_id: book.collectionId,
+      source_type: book.sourceType,
+      file_path: filePath
+    }).select().single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      name: data.name,
+      collectionId: data.collection_id,
+      sourceType: data.source_type,
+      pdfData: data.file_path,
+      createdAt: new Date(data.created_at).getTime()
     };
-    await DB.addBook(newBook);
-    return newBook;
   },
+
   deleteBook: async (id: string) => {
-    await DB.deleteBook(id);
-    // Also cleanup keys
-    const keys = StorageService.getKeys().filter(k => k.bookId !== id);
-    localStorage.setItem(STORAGE_KEYS.KEYS, JSON.stringify(keys));
+    // Delete keys first to avoid Foreign Key constraint error (since we didn't use CASCADE in SQL)
+    await supabase.from('access_keys').delete().eq('book_id', id);
+    await supabase.from('pdf_books').delete().eq('id', id);
   },
 
-  // Keys (Keep in LocalStorage for fast lookup, but sync with async books logic in UI)
-  getKeys: (): AccessKey[] => {
-    const data = localStorage.getItem(STORAGE_KEYS.KEYS);
-    return data ? JSON.parse(data) : [];
+  // Keys
+  getKeys: async (): Promise<AccessKey[]> => {
+    const { data } = await supabase.from('access_keys').select('*');
+    return (data || []).map((k: any) => ({
+      id: k.id,
+      key: k.key_code,
+      bookId: k.book_id,
+      printLimit: k.print_limit,
+      printCount: k.print_count
+    }));
   },
-  saveKey: (key: string, bookId: string, limit: number = 2) => {
-    const keys = StorageService.getKeys();
 
-    // Check if key already exists, if so, ensure unique or update? 
-    // For now, allow multiple same keys or unique? Assume unique key string for login.
-    // If key exists, do not duplicate, just update
-    const existingIndex = keys.findIndex(k => k.key === key);
-    if (existingIndex >= 0) {
-      // Prevent duplicate keys globally for simplicity in login
-      alert('Bu şifre zaten kullanımda!');
+  // Specialized method for login to avoid fetching all keys
+  verifyKey: async (password: string): Promise<AccessKey | null> => {
+    const { data, error } = await supabase
+      .from('access_keys')
+      .select('*')
+      .eq('key_code', password)
+      .maybeSingle();
+
+    if (error || !data) return null;
+
+    return {
+      id: data.id,
+      key: data.key_code,
+      bookId: data.book_id,
+      printLimit: data.print_limit,
+      printCount: data.print_count
+    };
+  },
+
+  saveKey: async (key: string, bookId: string, limit: number = 2) => {
+    // Check if key exists
+    const { data: existing } = await supabase.from('access_keys').select('id').eq('key_code', key).maybeSingle();
+    if (existing) {
+      alert('Bu şifre zaten kullanımda! Lütfen başka bir şifre deneyin.');
       throw new Error("Key exists");
     }
 
-    const newKey: AccessKey = {
-      id: crypto.randomUUID(),
-      key,
-      bookId,
-      printLimit: limit,
-      printCount: 0
+    const { data, error } = await supabase.from('access_keys').insert({
+      key_code: key,
+      book_id: bookId,
+      print_limit: limit,
+      print_count: 0
+    }).select().single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      key: data.key_code,
+      bookId: data.book_id,
+      printLimit: data.print_limit,
+      printCount: data.print_count
     };
-    localStorage.setItem(STORAGE_KEYS.KEYS, JSON.stringify([...keys, newKey]));
-    return newKey;
-  },
-  updateKeyCount: (keyId: string) => {
-    const keys = StorageService.getKeys().map(k =>
-      k.id === keyId ? { ...k, printCount: k.printCount + 1 } : k
-    );
-    localStorage.setItem(STORAGE_KEYS.KEYS, JSON.stringify(keys));
-  },
-  updateKeyPassword: (keyId: string, newPassword: string) => {
-    const keys = StorageService.getKeys().map(k =>
-      k.id === keyId ? { ...k, key: newPassword } : k
-    );
-    localStorage.setItem(STORAGE_KEYS.KEYS, JSON.stringify(keys));
   },
 
-  // Admin
-  getAdminPass: () => localStorage.getItem(STORAGE_KEYS.ADMIN_PASS) || 'Republic.1587',
-  setAdminPass: (pass: string) => localStorage.setItem(STORAGE_KEYS.ADMIN_PASS, pass)
+  updateKeyCount: async (keyId: string) => {
+    // Read first to inc
+    const { data } = await supabase.from('access_keys').select('print_count').eq('id', keyId).single();
+    if (data) {
+      await supabase.from('access_keys').update({ print_count: data.print_count + 1 }).eq('id', keyId);
+    }
+  },
+
+  updateKeyPassword: async (keyId: string, newPassword: string) => {
+    const { error } = await supabase.from('access_keys').update({ key_code: newPassword }).eq('id', keyId);
+    if (error) throw error;
+  },
+
+  // Admin Pass (LocalStorage is fine for now)
+  getAdminPass: () => localStorage.getItem('pdf_vault_admin_pass') || 'Republic.1587',
+  setAdminPass: (pass: string) => localStorage.setItem('pdf_vault_admin_pass', pass)
 };

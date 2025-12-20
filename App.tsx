@@ -28,8 +28,8 @@ const App: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const keys = StorageService.getKeys();
-      const match = keys.find(k => k.key === userKeyInput);
+      // Supabase: Verify key directly
+      const match = await StorageService.verifyKey(userKeyInput);
 
       if (match) {
         // Now fetch books asynchronously
