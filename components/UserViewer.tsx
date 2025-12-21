@@ -19,7 +19,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState<number>(1);
-  const printFrameRef = useRef<HTMLIFrameElement>(null);
+
 
   // Load Content
   useEffect(() => {
@@ -56,50 +56,123 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
     setPageNumber(prev => Math.min(Math.max(1, prev + offset), numPages || 1));
   };
 
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  // Helper to render page to image
+  const renderPageToImage = async (pdfDoc: any, pageNum: number): Promise<string> => {
+    const page = await pdfDoc.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 2.0 }); // 2x scale for better print quality
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+
+    if (!context) throw new Error("Canvas context failed");
+
+    await page.render({
+      canvasContext: context,
+      viewport: viewport
+    }).promise;
+
+    return canvas.toDataURL('image/jpeg', 0.85);
+  };
+
   const handlePrint = async () => {
     if (currentKey.printCount >= currentKey.printLimit) {
       alert("Yazdırma limitine (2 kez) ulaştınız.");
       return;
     }
 
-    if (printFrameRef.current && printFrameRef.current.contentWindow) {
-      const printWindow = printFrameRef.current.contentWindow;
+    setIsPrinting(true);
 
-      try {
-        // Strict Security: Logout immediately after print dialog closes
-        // This prevents keeping the file open after a potential 'Save as PDF'
-        const performLogout = () => {
-          // Remove listeners to prevent multiple calls
-          printWindow.onafterprint = null;
-          // Small delay to ensure dialog is fully gone
-          setTimeout(() => {
-            onExit();
-            alert("Güvenlik gereği yazdırma işleminden sonra oturum kapatılmıştır.");
-          }, 500);
-        };
+    try {
+      // 1. Load the PDF Document
+      const loadingTask = pdfjs.getDocument(pdfUrl!);
+      const pdfDoc = await loadingTask.promise;
+      const totalPages = pdfDoc.numPages;
+      const imageUrls: string[] = [];
 
-        // 1. matchMedia approach (Modern Chrome/Edge)
+      // 2. Render all pages as images
+      for (let i = 1; i <= totalPages; i++) {
+        const dataUrl = await renderPageToImage(pdfDoc, i);
+        imageUrls.push(dataUrl);
+      }
+
+      // 3. Create Print Window
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert("Pop-up engelleyiciyi kapatıp tekrar deneyin.");
+        setIsPrinting(false);
+        return;
+      }
+
+      // 4. Build Print Content (Images Only)
+      const htmlContent = `
+        <html>
+          <head>
+            <title>Yazdırılıyor...</title>
+            <style>
+              body { margin: 0; padding: 0; }
+              img { width: 100%; height: auto; display: block; break-after: page; }
+              @media print {
+                @page { margin: 0; }
+                body { margin: 1.6cm; }
+              }
+            </style>
+          </head>
+          <body>
+            ${imageUrls.map(url => `<img src="${url}" />`).join('')}
+          </body>
+        </html>
+      `;
+
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+
+      // 5. Secure Logout Hook
+      const performSecureLogout = () => {
+        printWindow.close(); // Force close the print window
+        onExit(); // Immediate Logout
+        // We use a small timeout to allow UI update before alert, but the state change is immediate
+        setTimeout(() => {
+          //alert("GÜVENLİK UYARISI: Yazdırma işlemi sonrası oturum otomatik olarak kapatılmıştır.");
+        }, 100);
+      };
+
+      // 6. Wait for images to load then Print
+      printWindow.onload = () => {
+        printWindow.focus();
+
+        // Strict Security Mechanism
+        // We attach listeners BEFORE printing
         const mediaQueryList = printWindow.matchMedia('print');
         mediaQueryList.addListener((mql) => {
           if (!mql.matches) {
-            performLogout();
+            performSecureLogout();
           }
         });
 
-        // 2. onafterprint fallback
-        printWindow.onafterprint = performLogout;
+        printWindow.onafterprint = performSecureLogout;
 
-        printWindow.focus();
+        // Execute Print
         printWindow.print();
 
-        await StorageService.updateKeyCount(currentKey.id);
-        const updatedKeys = await StorageService.getKeys();
-        const match = updatedKeys.find(k => k.id === currentKey.id);
-        if (match) setCurrentKey(match);
-      } catch (e) {
-        console.error("Yazdırma hatası", e);
-        alert("Yazdırma başlatılamadı.");
-      }
+        // Fallback: If for some reason listeners fail or dialogue blocks indefinetely, 
+        // we can't easily detect "cancel" vs "save" without these events.
+        // But the onafterprint is consistent across modern browsers.
+      };
+
+      // Update limits
+      await StorageService.updateKeyCount(currentKey.id);
+      const updatedKeys = await StorageService.getKeys();
+      const match = updatedKeys.find(k => k.id === currentKey.id);
+      if (match) setCurrentKey(match);
+
+    } catch (e) {
+      console.error("Yazdırma hazırlığı sırasında hata:", e);
+      alert("Yazdırma işlemi hazırlanırken bir hata oluştu.");
+    } finally {
+      setIsPrinting(false);
     }
   };
 
@@ -169,14 +242,14 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
           </div>
           <button
             onClick={handlePrint}
-            disabled={currentKey.printCount >= currentKey.printLimit}
-            className={`flex items-center gap-2 px-6 py-2 rounded-full font-bold transition ${currentKey.printCount >= currentKey.printLimit
+            disabled={currentKey.printCount >= currentKey.printLimit || isPrinting}
+            className={`flex items-center gap-2 px-6 py-2 rounded-full font-bold transition ${currentKey.printCount >= currentKey.printLimit || isPrinting
               ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
               : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
           >
-            <i className="fas fa-print"></i>
-            {currentKey.printCount >= currentKey.printLimit ? 'Doldu' : 'Yazdır'}
+            <i className={`fas ${isPrinting ? 'fa-spinner fa-spin' : 'fa-print'}`}></i>
+            {isPrinting ? 'Hazırlanıyor...' : (currentKey.printCount >= currentKey.printLimit ? 'Doldu' : 'Yazdır')}
           </button>
         </div>
       </div>
@@ -201,21 +274,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
               />
             </Document>
 
-            {/* Hidden Print Frame */}
-            <iframe
-              ref={printFrameRef}
-              src={pdfUrl}
-              title="print-frame"
-              style={{
-                position: 'absolute',
-                width: '0px',
-                height: '0px',
-                opacity: 0,
-                pointerEvents: 'none',
-                border: 'none',
-                display: 'block' // needs to be displayed to print, but 0 size
-              }}
-            />
+
           </>
         ) : (
           <div className="flex items-center justify-center h-full text-slate-200">
