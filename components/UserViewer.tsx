@@ -44,7 +44,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
     };
   }, [book]);
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (currentKey.printCount >= currentKey.printLimit) {
       alert("Yazdırma limitine (2 kez) ulaştınız.");
       return;
@@ -55,9 +55,9 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
         printFrameRef.current.contentWindow?.focus();
         printFrameRef.current.contentWindow?.print();
 
-        StorageService.updateKeyCount(currentKey.id);
+        await StorageService.updateKeyCount(currentKey.id);
         // Refresh local state
-        const updatedKeys = StorageService.getKeys();
+        const updatedKeys = await StorageService.getKeys();
         const match = updatedKeys.find(k => k.id === currentKey.id);
         if (match) setCurrentKey(match);
       } catch (e) {
@@ -86,7 +86,10 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
   }, [currentKey]);
 
   return (
-    <div className="fixed inset-0 bg-slate-900 flex flex-col z-50">
+    <div
+      className="fixed inset-0 bg-slate-900 flex flex-col z-50"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       {/* Viewer Header */}
       <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shadow-lg">
         <div className="flex items-center gap-4">
@@ -107,8 +110,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
             onClick={handlePrint}
             disabled={currentKey.printCount >= currentKey.printLimit}
             className={`flex items-center gap-2 px-6 py-2 rounded-full font-bold transition ${currentKey.printCount >= currentKey.printLimit
-                ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
+              ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+              : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
           >
             <i className="fas fa-print"></i>
