@@ -57,6 +57,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
   };
 
   const [isPrinting, setIsPrinting] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const handlePrint = async () => {
     if (currentKey.printCount >= currentKey.printLimit) {
@@ -85,19 +86,19 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
 
       document.body.appendChild(iframe);
 
-      // Secure Logout Hook
+      // Success Modal State - Defined at component level, but we modify logic here
+      // We need to use a ref or state outside to trigger re-render
+      // Since handlePrint is async, better to use state.
+
       const performSecureLogout = () => {
-        // Remove iframe to clean up
+        // Clean up frame
         if (document.body.contains(iframe)) {
           document.body.removeChild(iframe);
         }
 
-        onExit(); // Immediate Logout
-
-        // Hint to user why they were logged out
-        setTimeout(() => {
-          // alert("GÜVENLİK UYARISI: Yazdırma işlemi tamamlandı. Oturum kapatılıyor."); 
-        }, 100);
+        setIsPrinting(false);
+        // INSTEAD of immediate exit, show modal
+        setShowSuccessModal(true);
       };
 
       // Wait for iframe to load the PDF
@@ -108,10 +109,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
         }
 
         const printWindow = iframe.contentWindow;
-        printWindow.focus(); // Required for some browsers
+        printWindow.focus();
 
-        // Strict Security Mechanism
-        // We attach listeners BEFORE printing
         const mediaQueryList = printWindow.matchMedia('print');
         mediaQueryList.addListener((mql) => {
           if (!mql.matches) {
@@ -121,12 +120,11 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
 
         printWindow.onafterprint = performSecureLogout;
 
-        // Execute Print
         try {
           printWindow.print();
         } catch (e) {
           console.error("Print call failed", e);
-          performSecureLogout(); // Fail safe
+          performSecureLogout();
         }
       };
 
@@ -306,7 +304,34 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
           </div>
         )}
       </div>
-    </div>
+
+      {/* Success Modal */}
+      {
+        showSuccessModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
+            <div className="bg-white rounded-2xl p-8 max-w-lg text-center shadow-2xl animate-bounce-in">
+              <div className="bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i className="fas fa-check text-4xl text-green-600"></i>
+              </div>
+              <h2 className="text-2xl font-bold text-slate-800 mb-4">İşlem Başarılı</h2>
+              <p className="text-slate-600 text-lg mb-6 leading-relaxed">
+                Tebrikler, yazdırma işlemi gerçekleşmiştir.
+                <br />
+                <span className="font-bold text-red-500 block mt-2">
+                  UYARI: PDF kitapların çoğaltılması yasal yükümlülükler doğurmaktadır.
+                </span>
+              </p>
+              <button
+                onClick={onExit}
+                className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold text-lg hover:bg-slate-800 transition"
+              >
+                Tamam, Oturumu Kapat
+              </button>
+            </div>
+          </div>
+        )
+      }
+    </div >
   );
 };
 
