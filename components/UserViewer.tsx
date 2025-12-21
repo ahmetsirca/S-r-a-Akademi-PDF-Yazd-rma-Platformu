@@ -143,12 +143,33 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
   // Block keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Prevent Save
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
+        return;
       }
+
+      // Prevent Print (System)
       if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
         e.preventDefault();
-        handlePrint();
+        handlePrint(); // Redirect to our secure print
+        return;
+      }
+
+      // Prevent Copy
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+        e.preventDefault();
+        return;
+      }
+
+      // Prevent Inspect / DevTools
+      if (
+        e.key === 'F12' ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) ||
+        ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U'))
+      ) {
+        e.preventDefault();
+        return;
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -159,6 +180,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
     <div
       className="fixed inset-0 bg-slate-900 flex flex-col z-50 select-none"
       onContextMenu={(e) => { e.preventDefault(); return false; }}
+      onDragStart={(e) => e.preventDefault()}
     >
       {/* Header */}
       <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shadow-lg shrink-0">
