@@ -10,9 +10,10 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.89.0",
+    "pdfjs-dist": "^4.4.168",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "react-pdf": "^10.2.0"
+    "react-pdf": "^9.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
