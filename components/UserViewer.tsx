@@ -69,11 +69,14 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
     try {
       // Create a hidden iframe
       const iframe = document.createElement('iframe');
-      iframe.style.position = 'absolute';
-      iframe.style.width = '0px';
-      iframe.style.height = '0px';
+      iframe.style.position = 'fixed';
+      iframe.style.top = '-10000px';
+      iframe.style.left = '-10000px';
+      iframe.style.width = '1px';
+      iframe.style.height = '1px';
       iframe.style.border = 'none';
-      iframe.style.visibility = 'hidden'; // Ensure it's not visible
+      // iframe.style.visibility = 'hidden'; // Removed to avoid browser blocking
+      iframe.style.visibility = 'visible'; // Must be visible to print in some browsers, but off-screen
 
       // If pdfUrl is a blob URL, this works great. 
       // If it's a remote URL, it might simply download depending on browser/headers.
