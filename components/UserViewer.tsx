@@ -83,34 +83,62 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
       return;
     }
 
+    // 1. Open Print Window IMMEDIATELY (Synchronous) to avoid Popup Blocker
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert("Pop-up engelleyiciyi kapatıp tekrar deneyin.");
+      return;
+    }
+
     setIsPrinting(true);
 
+    // 2. Set Initial Content (Loading)
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Hazırlanıyor...</title>
+          <style>
+              body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #f1f5f9; color: #334155; }
+              .loader { border: 5px solid #e2e8f0; border-top: 5px solid #3b82f6; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+              @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+          </style>
+        </head>
+        <body>
+          <div class="loader"></div>
+          <h2>Yazdırma Önizlemesi Hazırlanıyor...</h2>
+          <p>Lütfen bekleyiniz, sayfalar işleniyor.</p>
+        </body>
+      </html>
+    `);
+    printWindow.document.close(); // Close after initial write
+
     try {
-      // 1. Load the PDF Document
+      // 3. Load the PDF Document
       const loadingTask = pdfjs.getDocument(pdfUrl!);
       const pdfDoc = await loadingTask.promise;
       const totalPages = pdfDoc.numPages;
       const imageUrls: string[] = [];
 
-      // 2. Render all pages as images
+      // 4. Render all pages as images
       for (let i = 1; i <= totalPages; i++) {
+        // Update loading text in the popup if possible
+        if (printWindow && !printWindow.closed) {
+          printWindow.document.body.querySelector('p')!.textContent = `Sayfa ${i} / ${totalPages} işleniyor...`;
+        }
         const dataUrl = await renderPageToImage(pdfDoc, i);
         imageUrls.push(dataUrl);
       }
 
-      // 3. Create Print Window
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        alert("Pop-up engelleyiciyi kapatıp tekrar deneyin.");
+      if (printWindow.closed) {
         setIsPrinting(false);
         return;
       }
 
-      // 4. Build Print Content (Images Only)
+      // 5. Build Print Content (Images Only)
       const htmlContent = `
         <html>
           <head>
-            <title>Yazdırılıyor...</title>
+            <title>Yazdır</title>
             <style>
               body { margin: 0; padding: 0; }
               img { width: 100%; height: auto; display: block; break-after: page; }
@@ -126,10 +154,12 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
         </html>
       `;
 
+      // Clear previous content and write new
+      printWindow.document.open();
       printWindow.document.write(htmlContent);
       printWindow.document.close();
 
-      // 5. Secure Logout Hook
+      // 6. Secure Logout Hook
       const performSecureLogout = () => {
         printWindow.close(); // Force close the print window
         onExit(); // Immediate Logout
@@ -139,7 +169,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
         }, 100);
       };
 
-      // 6. Wait for images to load then Print
+      // 7. Wait for images to load then Print
       printWindow.onload = () => {
         printWindow.focus();
 
@@ -157,7 +187,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
         // Execute Print
         printWindow.print();
 
-        // Fallback: If for some reason listeners fail or dialogue blocks indefinetely, 
+        // Fallback: If for some reason listeners fail or dialogue blocks indefinetely,
         // we can't easily detect "cancel" vs "save" without these events.
         // But the onafterprint is consistent across modern browsers.
       };
@@ -171,6 +201,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
     } catch (e) {
       console.error("Yazdırma hazırlığı sırasında hata:", e);
       alert("Yazdırma işlemi hazırlanırken bir hata oluştu.");
+      if (printWindow) printWindow.close();
     } finally {
       setIsPrinting(false);
     }
