@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PDFBook, AccessKey } from '../types';
 import { StorageService } from '../services/storage';
+import { Document, Page, pdfjs } from 'react-pdf';
+import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
+import 'react-pdf/dist/esm/Page/TextLayer.css';
+
+// Set worker source - using CDN for reliability with Vite without extra config
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface UserViewerProps {
   book: PDFBook;
@@ -11,30 +17,27 @@ interface UserViewerProps {
 const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
   const [currentKey, setCurrentKey] = useState(accessKey);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [numPages, setNumPages] = useState<number | null>(null);
+  const [pageNumber, setPageNumber] = useState<number>(1);
   const printFrameRef = useRef<HTMLIFrameElement>(null);
 
-  // Load Content (Blob for File, Embed URL for Link)
+  // Load Content
   useEffect(() => {
     const loadContent = async () => {
       if (book.sourceType === 'FILE' && book.pdfData) {
         try {
-          // If it's a data URI (base64)
           const res = await fetch(book.pdfData);
           const blob = await res.blob();
           const url = URL.createObjectURL(blob);
           setPdfUrl(url);
         } catch (e) {
           console.error("PDF Blob oluşturma hatası:", e);
-          // Fallback to data URI directly if blob fails
           setPdfUrl(book.pdfData || null);
         }
       } else if (book.sourceType === 'LINK' && book.sourceUrl) {
-        let url = book.sourceUrl;
-        // Google Drive Embed Logic - Convert to preview mode for better UX
-        if (url.includes('drive.google.com') && (url.includes('/view') || url.includes('/edit'))) {
-          url = url.replace(/\/view.*/, '/preview').replace(/\/edit.*/, '/preview');
-        }
-        setPdfUrl(url);
+        // Direct links might fail with react-pdf if CORS is not enabled on source
+        // But for now we try.
+        setPdfUrl(book.sourceUrl);
       }
     };
     loadContent();
@@ -43,6 +46,15 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
       if (pdfUrl && book.sourceType === 'FILE') URL.revokeObjectURL(pdfUrl);
     };
   }, [book]);
+
+  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+    setNumPages(numPages);
+    setPageNumber(1);
+  };
+
+  const changePage = (offset: number) => {
+    setPageNumber(prev => Math.min(Math.max(1, prev + offset), numPages || 1));
+  };
 
   const handlePrint = async () => {
     if (currentKey.printCount >= currentKey.printLimit) {
@@ -56,26 +68,22 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
         printFrameRef.current.contentWindow?.print();
 
         await StorageService.updateKeyCount(currentKey.id);
-        // Refresh local state
         const updatedKeys = await StorageService.getKeys();
         const match = updatedKeys.find(k => k.id === currentKey.id);
         if (match) setCurrentKey(match);
       } catch (e) {
         console.error("Yazdırma hatası", e);
-        alert("Yazdırma başlatılamadı. Tarayıcı ayarlarını kontrol edin.");
+        alert("Yazdırma başlatılamadı.");
       }
     }
   };
 
-  // Block basic keyboard shortcuts for saving and printing
+  // Block keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Prevent Save (Ctrl+S)
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
-        alert("İndirme işlemi devre dışı bırakılmıştır.");
       }
-      // Intercept Print (Ctrl+P)
       if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
         e.preventDefault();
         handlePrint();
@@ -87,23 +95,51 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
 
   return (
     <div
-      className="fixed inset-0 bg-slate-900 flex flex-col z-50"
-      onContextMenu={(e) => e.preventDefault()}
+      className="fixed inset-0 bg-slate-900 flex flex-col z-50 select-none"
+      onContextMenu={(e) => { e.preventDefault(); return false; }}
     >
-      {/* Viewer Header */}
-      <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shadow-lg">
+      {/* Header */}
+      <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shadow-lg shrink-0">
         <div className="flex items-center gap-4">
           <button onClick={onExit} className="text-white hover:bg-slate-700 p-2 rounded-lg transition">
             <i className="fas fa-arrow-left"></i>
           </button>
-          <h2 className="text-white font-semibold truncate max-w-[200px] md:max-w-md">{book.name}</h2>
+          <div className="flex flex-col">
+            <h2 className="text-white font-semibold truncate max-w-[200px] md:max-w-md">{book.name}</h2>
+            {numPages && (
+              <span className="text-xs text-slate-400">
+                Sayfa {pageNumber} / {numPages}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-4">
+          {/* Pagination Controls */}
+          <div className="flex bg-slate-700 rounded-lg overflow-hidden mr-4">
+            <button
+              disabled={pageNumber <= 1}
+              onClick={() => changePage(-1)}
+              className="p-2 text-white hover:bg-slate-600 disabled:opacity-30 px-3"
+            >
+              <i className="fas fa-chevron-left"></i>
+            </button>
+            <span className="px-3 py-2 text-white font-mono border-l border-r border-slate-600 flex items-center">
+              {pageNumber}
+            </span>
+            <button
+              disabled={pageNumber >= (numPages || 1)}
+              onClick={() => changePage(1)}
+              className="p-2 text-white hover:bg-slate-600 disabled:opacity-30 px-3"
+            >
+              <i className="fas fa-chevron-right"></i>
+            </button>
+          </div>
+
           <div className="hidden md:flex flex-col items-end">
-            <span className="text-slate-400 text-xs">Yazdırma Kotası</span>
+            <span className="text-slate-400 text-xs">Kota</span>
             <span className={`text-sm font-bold ${currentKey.printCount >= currentKey.printLimit ? 'text-red-400' : 'text-green-400'}`}>
-              {currentKey.printCount} / {currentKey.printLimit} Kullanıldı
+              {currentKey.printCount}/{currentKey.printLimit}
             </span>
           </div>
           <button
@@ -115,23 +151,30 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
               }`}
           >
             <i className="fas fa-print"></i>
-            {currentKey.printCount >= currentKey.printLimit ? 'Limit Doldu' : 'Kitabı Yazdır'}
+            {currentKey.printCount >= currentKey.printLimit ? 'Doldu' : 'Yazdır'}
           </button>
         </div>
       </div>
 
-      {/* PDF Content Area */}
-      <div className="flex-1 relative overflow-hidden bg-slate-200 flex justify-center">
+      {/* Content */}
+      <div className="flex-1 relative bg-slate-500 overflow-auto flex justify-center p-4">
         {pdfUrl ? (
           <>
-            {/* Display Frame */}
-            <iframe
-              src={book.sourceType === 'LINK' ? pdfUrl : `${pdfUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`}
-              className="w-full h-full shadow-2xl"
-              style={{ border: 'none' }}
-              title="PDF Viewer"
-              allow="autoplay" // Might be needed for some drive features
-            />
+            <Document
+              file={pdfUrl}
+              onLoadSuccess={onDocumentLoadSuccess}
+              loading={<div className="text-white mt-10">Kitap Yükleniyor...</div>}
+              error={<div className="text-red-300 mt-10">Kitap yüklenemedi.</div>}
+              className="shadow-2xl"
+            >
+              <Page
+                pageNumber={pageNumber}
+                renderAnnotationLayer={false}
+                renderTextLayer={false}
+                height={window.innerHeight * 0.85}
+                className="shadow-2xl"
+              />
+            </Document>
 
             {/* Hidden Print Frame */}
             <iframe
@@ -144,37 +187,16 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
                 height: '0px',
                 opacity: 0,
                 pointerEvents: 'none',
-                border: 'none'
+                border: 'none',
+                display: 'block' // needs to be displayed to print, but 0 size
               }}
             />
           </>
         ) : (
-          <div className="flex items-center justify-center h-full text-slate-500">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-700 mb-4 mx-auto"></div>
-              <p>İçerik Yükleniyor...</p>
-            </div>
+          <div className="flex items-center justify-center h-full text-slate-200">
+            Yükleniyor...
           </div>
         )}
-
-        {/* Transparent Security Overlay */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          <div className="w-full h-full flex flex-wrap gap-20 p-20 overflow-hidden opacity-5 select-none justify-center content-center">
-            {Array.from({ length: 20 }).map((_, i) => (
-              <span key={i} className="text-slate-900 text-2xl font-bold -rotate-45 whitespace-nowrap">
-                SADECE OKUNABİLİR - KOPYALANAMAZ
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Mobile Footer Info */}
-      <div className="md:hidden bg-slate-800 p-2 text-center text-xs text-slate-400">
-        Kota: {currentKey.printCount} / {currentKey.printLimit}
       </div>
     </div>
   );
