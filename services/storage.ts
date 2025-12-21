@@ -154,7 +154,107 @@ export const StorageService = {
     if (error) throw error;
   },
 
-  // Admin Pass (LocalStorage is fine for now)
+
+  // Admin Pass
   getAdminPass: () => localStorage.getItem('pdf_vault_admin_pass') || 'Republic.1587',
-  setAdminPass: (pass: string) => localStorage.setItem('pdf_vault_admin_pass', pass)
+  setAdminPass: (pass: string) => localStorage.setItem('pdf_vault_admin_pass', pass),
+
+  // -- FOLDERS SYSTEM --
+  getFolders: async (): Promise<import('../types').Folder[]> => {
+    const { data } = await supabase.from('folders').select('*').order('created_at', { ascending: false });
+    return (data || []).map((f: any) => ({
+      id: f.id,
+      title: f.title,
+      isActive: f.is_active,
+      createdAt: new Date(f.created_at).getTime()
+    }));
+  },
+
+  createFolder: async (title: string) => {
+    const { data, error } = await supabase.from('folders').insert({ title }).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  deleteFolder: async (id: string) => {
+    await supabase.from('folders').delete().eq('id', id);
+  },
+
+  // Folder Content
+  getFolderContent: async (folderId: string): Promise<import('../types').FolderContent[]> => {
+    const { data } = await supabase.from('folder_content').select('*').eq('folder_id', folderId);
+    return (data || []).map((c: any) => ({
+      id: c.id,
+      folderId: c.folder_id,
+      type: c.type,
+      title: c.title,
+      url: c.url,
+      createdAt: new Date(c.created_at).getTime()
+    }));
+  },
+
+  addFolderItem: async (folderId: string, type: 'pdf' | 'link', title: string, fileDataOrUrl: string) => {
+    let finalUrl = fileDataOrUrl;
+
+    if (type === 'pdf' && fileDataOrUrl.startsWith('data:')) {
+      // Upload PDF
+      const base64Response = await fetch(fileDataOrUrl);
+      const blob = await base64Response.blob();
+      const safeName = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const fileName = `folder_content/${Date.now()}_${safeName}.pdf`;
+
+      const { error: uploadError } = await supabase.storage.from('sirca-pdfs').upload(fileName, blob);
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from('sirca-pdfs').getPublicUrl(fileName);
+      finalUrl = publicUrl;
+    }
+
+    const { error } = await supabase.from('folder_content').insert({
+      folder_id: folderId,
+      type,
+      title,
+      url: finalUrl
+    });
+    if (error) throw error;
+  },
+
+  deleteFolderItem: async (id: string) => {
+    await supabase.from('folder_content').delete().eq('id', id);
+  },
+
+  // Folder Keys
+  getFolderKeys: async (folderId: string): Promise<import('../types').FolderKey[]> => {
+    const { data } = await supabase.from('folder_keys').select('*').eq('folder_id', folderId);
+    return (data || []).map((k: any) => ({
+      id: k.id,
+      folderId: k.folder_id,
+      keyCode: k.key_code,
+      note: k.note,
+      createdAt: new Date(k.created_at).getTime()
+    }));
+  },
+
+  createFolderKey: async (folderId: string, keyCode: string, note: string) => {
+    const { error } = await supabase.from('folder_keys').insert({
+      folder_id: folderId,
+      key_code: keyCode,
+      note
+    });
+    if (error) throw error;
+  },
+
+  deleteFolderKey: async (keyId: string) => {
+    await supabase.from('folder_keys').delete().eq('id', keyId);
+  },
+
+  // Verify Folder Key
+  verifyFolderKey: async (folderId: string, keyCode: string): Promise<boolean> => {
+    const { data } = await supabase.from('folder_keys')
+      .select('id')
+      .eq('folder_id', folderId)
+      .eq('key_code', keyCode)
+      .maybeSingle();
+    return !!data;
+  }
 };

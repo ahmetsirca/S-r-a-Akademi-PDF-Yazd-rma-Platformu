@@ -23,4 +23,29 @@ export interface Collection {
   createdAt: number;
 }
 
-export type ViewState = 'USER_LOGIN' | 'USER_VIEWER' | 'ADMIN_LOGIN' | 'ADMIN_DASHBOARD';
+// -- NEW TYPES FOR COURSES/FOLDERS --
+export interface Folder {
+  id: string;
+  title: string;
+  isActive: boolean;
+  createdAt: number;
+}
+
+export interface FolderContent {
+  id: string;
+  folderId: string;
+  type: 'pdf' | 'link';
+  title: string;
+  url: string;
+  createdAt: number;
+}
+
+export interface FolderKey {
+  id: string;
+  folderId: string;
+  keyCode: string;
+  note?: string;
+  createdAt: number;
+}
+
+export type ViewState = 'USER_LOGIN' | 'USER_VIEWER' | 'ADMIN_LOGIN' | 'ADMIN_DASHBOARD' | 'USER_FOLDER_VIEW';
