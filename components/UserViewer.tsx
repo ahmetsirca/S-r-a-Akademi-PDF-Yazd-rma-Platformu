@@ -62,10 +62,35 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
       return;
     }
 
-    if (printFrameRef.current) {
+    if (printFrameRef.current && printFrameRef.current.contentWindow) {
+      const printWindow = printFrameRef.current.contentWindow;
+
       try {
-        printFrameRef.current.contentWindow?.focus();
-        printFrameRef.current.contentWindow?.print();
+        // Strict Security: Logout immediately after print dialog closes
+        // This prevents keeping the file open after a potential 'Save as PDF'
+        const performLogout = () => {
+          // Remove listeners to prevent multiple calls
+          printWindow.onafterprint = null;
+          // Small delay to ensure dialog is fully gone
+          setTimeout(() => {
+            onExit();
+            alert("Güvenlik gereği yazdırma işleminden sonra oturum kapatılmıştır.");
+          }, 500);
+        };
+
+        // 1. matchMedia approach (Modern Chrome/Edge)
+        const mediaQueryList = printWindow.matchMedia('print');
+        mediaQueryList.addListener((mql) => {
+          if (!mql.matches) {
+            performLogout();
+          }
+        });
+
+        // 2. onafterprint fallback
+        printWindow.onafterprint = performLogout;
+
+        printWindow.focus();
+        printWindow.print();
 
         await StorageService.updateKeyCount(currentKey.id);
         const updatedKeys = await StorageService.getKeys();
