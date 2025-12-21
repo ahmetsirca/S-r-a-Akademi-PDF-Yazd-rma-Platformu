@@ -19,7 +19,120 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState<number>(1);
+  const [drawMode, setDrawMode] = useState(false);
+  const scrollTimeout = useRef<any>(null);
+  const [annotations, setAnnotations] = useState<Record<number, { x: number, y: number }[][]>>({});
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isDrawing = useRef(false);
+  const currentPath = useRef<{ x: number, y: number }[]>([]);
 
+  // Persistence
+  useEffect(() => {
+    const saved = localStorage.getItem(`sirca_lp_${book.id}`);
+    if (saved) {
+      const p = parseInt(saved);
+      if (p > 0) setPageNumber(p);
+    }
+  }, [book.id]);
+
+  useEffect(() => {
+    if (pageNumber > 0) localStorage.setItem(`sirca_lp_${book.id}`, pageNumber.toString());
+  }, [pageNumber, book.id]);
+
+  // Persistence (Annotations)
+  useEffect(() => {
+    const savedNotes = localStorage.getItem(`sirca_notes_${book.id}`);
+    if (savedNotes) { try { setAnnotations(JSON.parse(savedNotes)); } catch (e) { } }
+  }, [book.id]);
+
+  useEffect(() => {
+    if (Object.keys(annotations).length > 0) localStorage.setItem(`sirca_notes_${book.id}`, JSON.stringify(annotations));
+  }, [annotations, book.id]);
+
+  // Drawing Logic
+  const getPoint = (e: any) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+      x: (clientX - rect.left) * (canvas.width / rect.width),
+      y: (clientY - rect.top) * (canvas.height / rect.height)
+    };
+  };
+
+  const startDrawing = (e: any) => {
+    if (!drawMode) return;
+    isDrawing.current = true;
+    const p = getPoint(e);
+    currentPath.current = [p];
+    if (e.type === 'touchstart') document.body.style.overflow = 'hidden';
+  };
+
+  const draw = (e: any) => {
+    if (!isDrawing.current || !drawMode) return;
+    const p = getPoint(e);
+    currentPath.current.push(p);
+
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(255, 0, 0, 0.6)';
+        ctx.beginPath();
+        const prev = currentPath.current[currentPath.current.length - 2] || p;
+        ctx.moveTo(prev.x, prev.y);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
+    }
+  };
+
+  const stopDrawing = () => {
+    if (!isDrawing.current) return;
+    isDrawing.current = false;
+    document.body.style.overflow = '';
+    if (currentPath.current.length > 0) {
+      setAnnotations(prev => ({ ...prev, [pageNumber]: [...(prev[pageNumber] || []), currentPath.current] }));
+    }
+    currentPath.current = [];
+  };
+
+  // Redraw Canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const parent = canvas.parentElement;
+    if (parent) { canvas.width = parent.clientWidth; canvas.height = parent.clientHeight; }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const paths = annotations[pageNumber] || [];
+    ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(255, 0, 0, 0.6)';
+
+    paths.forEach(path => {
+      if (path.length < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(path[0].x, path[0].y);
+      for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+      ctx.stroke();
+    });
+  }, [pageNumber, annotations, drawMode, numPages]);
+
+  const undoAnnotation = () => {
+    setAnnotations(prev => {
+      const paths = prev[pageNumber] || [];
+      if (paths.length === 0) return prev;
+      return { ...prev, [pageNumber]: paths.slice(0, -1) };
+    });
+  };
+
+  const clearPage = () => {
+    if (confirm('Sayfa temizlensin mi?')) setAnnotations(prev => ({ ...prev, [pageNumber]: [] }));
+  };
 
   // Load Content
   useEffect(() => {
@@ -35,8 +148,6 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
           setPdfUrl(book.pdfData || null);
         }
       } else if (book.sourceType === 'LINK' && book.sourceUrl) {
-        // Direct links might fail with react-pdf if CORS is not enabled on source
-        // But for now we try.
         setPdfUrl(book.sourceUrl);
       }
     };
@@ -49,11 +160,33 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
-    setPageNumber(1);
+    // Do not reset pageNumber here if we loaded from persistence
+    // But verify bounds
+    setPageNumber(prev => prev > numPages ? 1 : prev);
   };
 
   const changePage = (offset: number) => {
     setPageNumber(prev => Math.min(Math.max(1, prev + offset), numPages || 1));
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    if (drawMode) return; // Disable wheel nav when drawing to avoid accidents
+    if (scrollTimeout.current) return;
+
+    // Only page turn if significantly scrolled
+    if (e.deltaY > 50) {
+      changePage(1);
+      blockScroll();
+    } else if (e.deltaY < -50) {
+      changePage(-1);
+      blockScroll();
+    }
+  };
+
+  const blockScroll = () => {
+    scrollTimeout.current = setTimeout(() => {
+      scrollTimeout.current = null;
+    }, 300);
   };
 
   const [isPrinting, setIsPrinting] = useState(false);
@@ -239,9 +372,19 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
             >
               <i className="fas fa-chevron-left"></i>
             </button>
-            <span className="px-3 py-2 text-white font-mono border-l border-r border-slate-600 flex items-center">
-              {pageNumber}
-            </span>
+            <form onSubmit={(e) => { e.preventDefault(); }} className="flex items-center">
+              <input
+                type="number"
+                min={1}
+                max={numPages || 1}
+                value={pageNumber}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  if (val >= 1 && val <= (numPages || 1)) setPageNumber(val);
+                }}
+                className="w-16 px-2 py-2 text-center bg-slate-800 text-white font-mono border-l border-r border-slate-600 outline-none focus:bg-slate-700 appearance-none"
+              />
+            </form>
             <button
               disabled={pageNumber >= (numPages || 1)}
               onClick={() => changePage(1)}
@@ -250,6 +393,23 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
               <i className="fas fa-chevron-right"></i>
             </button>
           </div>
+
+          {/* Draw Controls */}
+          {drawMode && (
+            <div className="flex bg-slate-700 rounded-lg mr-2 overflow-hidden">
+              <button onClick={undoAnnotation} className="p-2 text-white hover:bg-slate-600 px-3 border-r border-slate-600" title="Geri Al"><i className="fas fa-undo"></i></button>
+              <button onClick={clearPage} className="p-2 text-red-400 hover:bg-slate-600 px-3" title="Temizle"><i className="fas fa-trash"></i></button>
+            </div>
+          )}
+
+          {/* Draw Toggle */}
+          <button
+            onClick={() => setDrawMode(!drawMode)}
+            className={`p-2 rounded-lg mr-4 transition ${drawMode ? 'bg-yellow-500 text-slate-900 border-2 border-yellow-600' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+            title="Çizim Modu"
+          >
+            <i className="fas fa-pen"></i>
+          </button>
 
           <div className="hidden md:flex flex-col items-end">
             <span className="text-slate-400 text-xs">Kota</span>
@@ -272,7 +432,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 relative bg-slate-500 overflow-auto flex justify-center p-4">
+      <div className="flex-1 relative bg-slate-500 overflow-auto flex justify-center p-4 outline-none" onWheel={handleWheel}>
         {!isFocused && (
           <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/50 text-white font-bold text-2xl">
             Görüntülemek için pencereye odaklanın
@@ -292,8 +452,20 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
                 renderAnnotationLayer={false}
                 renderTextLayer={false}
                 height={window.innerHeight * 0.85}
-                className="shadow-2xl"
-              />
+                className="shadow-2xl relative"
+              >
+                <canvas
+                  ref={canvasRef}
+                  className={`absolute inset-0 z-50 ${drawMode ? 'cursor-crosshair' : 'pointer-events-none'}`}
+                  onMouseDown={startDrawing}
+                  onMouseMove={draw}
+                  onMouseUp={stopDrawing}
+                  onMouseLeave={stopDrawing}
+                  onTouchStart={startDrawing}
+                  onTouchMove={draw}
+                  onTouchEnd={stopDrawing}
+                />
+              </Page>
             </Document>
 
 
