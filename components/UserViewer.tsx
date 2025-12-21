@@ -94,8 +94,15 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
     if (!isDrawing.current) return;
     isDrawing.current = false;
     document.body.style.overflow = '';
-    if (currentPath.current.length > 0) {
-      setAnnotations(prev => ({ ...prev, [pageNumber]: [...(prev[pageNumber] || []), currentPath.current] }));
+
+    // Capture path data BEFORE resetting ref to avoid async state issues
+    const completedPath = currentPath.current;
+
+    if (completedPath.length > 0) {
+      setAnnotations(prev => ({
+        ...prev,
+        [pageNumber]: [...(prev[pageNumber] || []), completedPath]
+      }));
     }
     currentPath.current = [];
   };
