@@ -176,12 +176,42 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentKey]);
 
+  // Focus Protection
+  const [isFocused, setIsFocused] = useState(true);
+
+  useEffect(() => {
+    const onBlur = () => setIsFocused(false);
+    const onFocus = () => setIsFocused(true);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, []);
+
   return (
     <div
-      className="fixed inset-0 bg-slate-900 flex flex-col z-50 select-none"
+      className={`fixed inset-0 bg-slate-900 flex flex-col z-50 select-none transition-all duration-300 ${!isFocused ? 'blur-xl opacity-50 grayscale' : ''}`}
       onContextMenu={(e) => { e.preventDefault(); return false; }}
       onDragStart={(e) => e.preventDefault()}
     >
+      <style>{`
+        @media print {
+          body > *:not(iframe) {
+            display: none !important;
+          }
+          body::before {
+            content: "Bu belge korumalıdır. Sadece sistem üzerinden yazdırılabilir.";
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-size: 24px;
+            color: #ccc;
+          }
+        }
+      `}</style>
       {/* Header */}
       <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shadow-lg shrink-0">
         <div className="flex items-center gap-4">
@@ -242,6 +272,11 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
 
       {/* Content */}
       <div className="flex-1 relative bg-slate-500 overflow-auto flex justify-center p-4">
+        {!isFocused && (
+          <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/50 text-white font-bold text-2xl">
+            Görüntülemek için pencereye odaklanın
+          </div>
+        )}
         {pdfUrl ? (
           <>
             <Document
