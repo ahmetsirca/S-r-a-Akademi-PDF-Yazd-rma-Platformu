@@ -19,6 +19,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState<number>(1);
+  const [scale, setScale] = useState(1.0);
   const [drawMode, setDrawMode] = useState(false);
   const scrollTimeout = useRef<any>(null);
   const [annotations, setAnnotations] = useState<Record<number, { x: number, y: number }[][]>>({});
@@ -169,11 +170,22 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
     setPageNumber(prev => Math.min(Math.max(1, prev + offset), numPages || 1));
   };
 
+  const handleZoom = (delta: number) => {
+    setScale(prev => Math.min(Math.max(0.5, prev + delta), 3.0));
+  };
+
   const handleWheel = (e: React.WheelEvent) => {
-    if (drawMode) return; // Disable wheel nav when drawing to avoid accidents
+    if (drawMode) return;
+
+    // Zoom on Ctrl + Wheel
+    if (e.ctrlKey) {
+      if (e.deltaY < 0) handleZoom(0.1);
+      else handleZoom(-0.1);
+      return;
+    }
+
     if (scrollTimeout.current) return;
 
-    // Only page turn if significantly scrolled
     if (e.deltaY > 50) {
       changePage(1);
       blockScroll();
@@ -363,6 +375,13 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
         </div>
 
         <div className="flex items-center gap-4">
+          {/* Zoom Controls */}
+          <div className="flex bg-slate-700 rounded-lg mr-4 items-center overflow-hidden">
+            <button onClick={() => handleZoom(-0.2)} className="p-2 text-white hover:bg-slate-600 px-3 border-r border-slate-600"><i className="fas fa-search-minus"></i></button>
+            <span className="px-2 text-center text-white text-xs min-w-[3rem]">{Math.round(scale * 100)}%</span>
+            <button onClick={() => handleZoom(0.2)} className="p-2 text-white hover:bg-slate-600 px-3 border-l border-slate-600"><i className="fas fa-search-plus"></i></button>
+          </div>
+
           {/* Pagination Controls */}
           <div className="flex bg-slate-700 rounded-lg overflow-hidden mr-4">
             <button
@@ -449,9 +468,9 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
             >
               <Page
                 pageNumber={pageNumber}
+                scale={scale}
                 renderAnnotationLayer={false}
-                renderTextLayer={false}
-                height={window.innerHeight * 0.85}
+                renderTextLayer={true}
                 className="shadow-2xl relative"
               >
                 <canvas
