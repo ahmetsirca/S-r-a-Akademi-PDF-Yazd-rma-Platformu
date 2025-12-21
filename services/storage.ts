@@ -236,16 +236,18 @@ export const StorageService = {
       folderIds: k.folder_ids || [], // Handle array
       keyCode: k.key_code,
       note: k.note,
+      allowPrint: k.allow_print,
       expiresAt: k.expires_at ? new Date(k.expires_at).getTime() : null,
       createdAt: new Date(k.created_at).getTime()
     }));
   },
 
-  createFolderKey: async (folderIds: string[], keyCode: string, note: string, expiresAt: Date | null) => {
+  createFolderKey: async (folderIds: string[], keyCode: string, note: string, expiresAt: Date | null, allowPrint: boolean) => {
     const { error } = await supabase.from('folder_keys').insert({
       folder_ids: folderIds,
       key_code: keyCode,
       note,
+      allow_print: allowPrint,
       expires_at: expiresAt ? expiresAt.toISOString() : null
     });
     if (error) throw error;
@@ -280,6 +282,7 @@ export const StorageService = {
       folderIds: keyData.folder_ids,
       keyCode: keyData.key_code,
       note: keyData.note,
+      allowPrint: keyData.allow_print,
       expiresAt: keyData.expires_at ? new Date(keyData.expires_at).getTime() : null,
       createdAt: new Date(keyData.created_at).getTime()
     };

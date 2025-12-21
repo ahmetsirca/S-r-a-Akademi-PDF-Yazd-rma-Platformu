@@ -44,5 +44,14 @@ create table if not exists folder_keys (
   key_code text unique not null,
   note text, -- e.g. Student Name
   expires_at timestamp with time zone, -- Optional expiration
+  allow_print boolean default false, -- Control printing permission
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+-- Migration for existing tables (in case user doesn't want to drop)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'folder_keys' AND column_name = 'allow_print') THEN
+        ALTER TABLE folder_keys ADD COLUMN allow_print boolean default false;
+    END IF;
+END $$;

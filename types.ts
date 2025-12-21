@@ -46,6 +46,7 @@ export interface FolderKey {
   folderIds: string[]; // Array of UUIDs
   keyCode: string;
   note?: string;
+  allowPrint: boolean;
   expiresAt: number | null; // Timestamp or null
   createdAt: number;
 }

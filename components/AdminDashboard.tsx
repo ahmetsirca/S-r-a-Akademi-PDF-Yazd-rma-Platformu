@@ -46,6 +46,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [newFolderKeyNote, setNewFolderKeyNote] = useState('');
   const [selectedFolderIdsForKey, setSelectedFolderIdsForKey] = useState<string[]>([]);
   const [keyExpiresAt, setKeyExpiresAt] = useState('');
+  const [allowPrint, setAllowPrint] = useState(false);
 
   useEffect(() => {
     refreshData();
@@ -215,9 +216,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         selectedFolderIdsForKey,
         newFolderKey,
         newFolderKeyNote,
-        keyExpiresAt ? new Date(keyExpiresAt) : null
+        keyExpiresAt ? new Date(keyExpiresAt) : null,
+        allowPrint
       );
-      setNewFolderKey(''); setNewFolderKeyNote(''); setKeyExpiresAt(''); setSelectedFolderIdsForKey([]);
+      setNewFolderKey(''); setNewFolderKeyNote(''); setKeyExpiresAt(''); setSelectedFolderIdsForKey([]); setAllowPrint(false);
       setFolderKeys(await StorageService.getFolderKeys());
       alert('Şifre oluşturuldu.');
     } catch (e: any) {
@@ -445,6 +447,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                     <input type="datetime-local" className="w-full border p-2 rounded text-sm" value={keyExpiresAt} onChange={(e) => setKeyExpiresAt(e.target.value)} />
                     <p className="text-xs text-slate-400 mt-1">Boş bırakılırsa süresiz olur.</p>
                   </div>
+                  <div className="flex items-center gap-2 pt-2">
+                    <input type="checkbox" id="allowPrint" className="w-4 h-4 text-blue-600 rounded" checked={allowPrint} onChange={(e) => setAllowPrint(e.target.checked)} />
+                    <label htmlFor="allowPrint" className="text-sm font-bold text-slate-700 cursor-pointer">Yazdırma İzni Ver</label>
+                  </div>
                 </div>
 
                 {/* Right: Folder Selection */}
@@ -478,7 +484,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead>
-                    <tr className="bg-slate-50 text-slate-600 border-b"><th className="p-3">Şifre</th><th className="p-3">Kapsam</th><th className="p-3">Not</th><th className="p-3">Bitiş</th><th className="p-3 text-right">Sil</th></tr>
+                    <tr className="bg-slate-50 text-slate-600 border-b"><th className="p-3">Şifre</th><th className="p-3">Kapsam</th><th className="p-3">Not</th><th className="p-3">Yazdır</th><th className="p-3">Bitiş</th><th className="p-3 text-right">Sil</th></tr>
                   </thead>
                   <tbody>
                     {folderKeys.map(k => (
@@ -494,6 +500,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                           </div>
                         </td>
                         <td className="p-3 text-slate-600">{k.note || '-'}</td>
+                        <td className="p-3">
+                          {k.allowPrint ? <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold">Evet</span> : <span className="text-xs bg-red-50 text-red-400 px-2 py-1 rounded">Hayır</span>}
+                        </td>
                         <td className="p-3">
                           {k.expiresAt ? (
                             <span className={`text-xs font-bold px-2 py-1 rounded ${k.expiresAt < Date.now() ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>

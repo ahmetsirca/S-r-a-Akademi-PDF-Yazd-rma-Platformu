@@ -23,6 +23,7 @@ const App: React.FC = () => {
   // Navigation & Security State
   const [navigationStack, setNavigationStack] = useState<import('./types').Folder[]>([]);
   const [unlockedFolderIds, setUnlockedFolderIds] = useState<string[]>([]);
+  const [currentFolderKey, setCurrentFolderKey] = useState<import('./types').FolderKey | null>(null);
 
   useEffect(() => {
     // Initial fetch of data
@@ -66,6 +67,7 @@ const App: React.FC = () => {
     if (keyData) {
       // Success! Unlock ALL folders this key provides access to
       setUnlockedFolderIds(prev => [...new Set([...prev, ...keyData.folderIds])]);
+      setCurrentFolderKey(keyData);
 
       const folder = folders.find(f => f.id === selectedFolderId);
       if (folder) setNavigationStack(prev => [...prev, folder]);
@@ -133,14 +135,18 @@ const App: React.FC = () => {
         collectionId: content.folderId,
         sourceType: 'FILE',
         sourceUrl: content.url,
+        pdfData: content.url, // CRITICAL FIX: UserViewer needs pdfData for FILE type to fetch blob
         createdAt: Date.now()
       };
-      // Mock access key (unlimited for folder items)
+
+      // Use the verified folder key's permissions
+      const limit = currentFolderKey?.allowPrint ? 9999 : 0;
+
       const mockKey: AccessKey = {
         id: 'folder-access',
-        key: 'folder-key',
+        key: currentFolderKey?.keyCode || 'folder-key',
         bookId: content.id,
-        printLimit: 9999,
+        printLimit: limit,
         printCount: 0
       };
       setActiveBook(mockBook);
