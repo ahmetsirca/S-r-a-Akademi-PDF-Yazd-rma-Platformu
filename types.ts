@@ -26,6 +26,7 @@ export interface Collection {
 // -- NEW TYPES FOR COURSES/FOLDERS --
 export interface Folder {
   id: string;
+  parentId: string | null;
   title: string;
   isActive: boolean;
   createdAt: number;
@@ -42,9 +43,10 @@ export interface FolderContent {
 
 export interface FolderKey {
   id: string;
-  folderId: string;
+  folderIds: string[]; // Array of UUIDs
   keyCode: string;
   note?: string;
+  expiresAt: number | null; // Timestamp or null
   createdAt: number;
 }
 

@@ -14,21 +14,33 @@ const App: React.FC = () => {
   const [activeKey, setActiveKey] = useState<AccessKey | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // -- DERSLERIM STATE --
+  // New States for Folder System
   const [folders, setFolders] = useState<import('./types').Folder[]>([]);
+  const [folderContent, setFolderContent] = useState<import('./types').FolderContent[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [folderKeyInput, setFolderKeyInput] = useState('');
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null); // For password prompt
-  const [openFolderId, setOpenFolderId] = useState<string | null>(null); // For viewing contents
-  const [folderContents, setFolderContents] = useState<import('./types').FolderContent[]>([]);
-  const [activeFolderKey, setActiveFolderKey] = useState<import('./types').FolderKey | null>(null);
+  const [selectedContent, setSelectedContent] = useState<import('./types').FolderContent | null>(null);
 
-  React.useEffect(() => {
-    loadFolders();
+  // Navigation & Security State
+  const [navigationStack, setNavigationStack] = useState<import('./types').Folder[]>([]);
+  const [unlockedFolderIds, setUnlockedFolderIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Initial fetch of data
+    fetchInitialData();
   }, []);
 
-  const loadFolders = async () => {
-    const f = await StorageService.getFolders();
-    setFolders(f);
+  const fetchInitialData = async () => {
+    setFolders(await StorageService.getFolders());
+    // We might need to fetch ALL content upfront or lazy load. For this size, fetching all is fine or fetch by folder.
+    // However, existing logic passed 'folderId' to getFolderContent. 
+    // Let's modify to fetch all or we'll need to fetch dynamically.
+    // For simplicity, let's lazy load content when entering a folder? 
+    // Or just fetch all contents for now if dataset is small.
+    // Let's stick to lazy-ish: 
+    // Actually, getting ALL content might be easier for search/filter later.
+    // But currently `getFolderContent` takes ID.
+    // Let's update `handleFolderLogin` to fetch content.
   };
 
   const handleAdminLogin = (e: React.FormEvent) => {
@@ -38,6 +50,53 @@ const App: React.FC = () => {
       setAdminInput('');
     } else {
       alert('Hatalı yönetici şifresi');
+    }
+  };
+
+  const handleFolderClick = async (folder: import('./types').Folder) => {
+    // Check if unlocked or requires auth
+    // If unlocked, push to stack and view
+    if (unlockedFolderIds.includes(folder.id)) {
+      setNavigationStack(prev => [...prev, folder]);
+      setFolderContent(await StorageService.getFolderContent(folder.id)); // Fetch content for this folder
+      setView('USER_FOLDER_VIEW');
+    } else {
+      // Require Auth
+      setSelectedFolderId(folder.id);
+      setFolderKeyInput('');
+      setView('USER_FOLDER_AUTH');
+    }
+  };
+
+  const handleFolderLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedFolderId) return;
+
+    const keyData = await StorageService.verifyFolderKey(selectedFolderId, folderKeyInput);
+    if (keyData) {
+      // Success! Unlock ALL folders this key provides access to
+      setUnlockedFolderIds(prev => [...new Set([...prev, ...keyData.folderIds])]);
+
+      const folder = folders.find(f => f.id === selectedFolderId);
+      if (folder) setNavigationStack(prev => [...prev, folder]);
+
+      setFolderContent(await StorageService.getFolderContent(selectedFolderId));
+      setView('USER_FOLDER_VIEW');
+    } else {
+      alert("Hatalı veya süresi dolmuş şifre!");
+    }
+  };
+
+  const handleNavigateBack = async () => {
+    const newStack = [...navigationStack];
+    newStack.pop();
+    setNavigationStack(newStack);
+    if (newStack.length === 0) {
+      setView('USER_LOGIN');
+    } else {
+      // Refresh content for previous folder
+      const prevFolder = newStack[newStack.length - 1];
+      setFolderContent(await StorageService.getFolderContent(prevFolder.id));
     }
   };
 
@@ -250,72 +309,91 @@ const App: React.FC = () => {
                 </div>
               </div>
             </div>
-
-            {/* Password Modal */}
-            {selectedFolderId && (
-              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full relative">
-                  <button onClick={() => setSelectedFolderId(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
-                    <i className="fas fa-times text-xl"></i>
-                  </button>
-                  <div className="text-center mb-6">
-                    <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <i className="fas fa-lock text-3xl"></i>
-                    </div>
-                    <h3 className="text-xl font-bold text-slate-800">Klasör Şifresi</h3>
-                    <p className="text-sm text-slate-500">"{folders.find(f => f.id === selectedFolderId)?.title}" klasörünü görüntülemek için şifrenizi giriniz.</p>
-                  </div>
-                  <form onSubmit={handleFolderLogin}>
-                    <input
-                      type="password"
-                      autoFocus
-                      className="w-full text-center text-2xl tracking-widest p-3 border-b-2 border-slate-200 focus:border-blue-600 outline-none font-mono mb-6"
-                      placeholder="******"
-                      value={folderKeyInput}
-                      onChange={(e) => setFolderKeyInput(e.target.value)}
-                    />
-                    <button className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition">Giriş Yap</button>
-                  </form>
-                </div>
-              </div>
-            )}
           </>
         )}
 
-        {view === 'USER_FOLDER_VIEW' && (
-          <div className="max-w-5xl mx-auto px-4 py-8">
-            <button onClick={() => { setView('USER_LOGIN'); setOpenFolderId(null); }} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-blue-600 transition font-medium">
-              <i className="fas fa-arrow-left"></i> Geri Dön
-            </button>
-
-            <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-8 min-h-[50vh]">
-              <div className="mb-8 border-b pb-4">
-                <h1 className="text-3xl font-bold text-slate-800">{folders.find(f => f.id === openFolderId)?.title}</h1>
-                <p className="text-slate-500">Ders İçerikleri</p>
-              </div>
-
-              {folderContents.length === 0 ? (
-                <div className="text-center py-12 text-slate-400">
-                  <i className="fas fa-folder-open text-4xl mb-3 opacity-50"></i>
-                  <p>Bu klasörde henüz içerik yok.</p>
+        {view === 'USER_FOLDER_AUTH' && selectedFolderId && (
+          <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+            <div className="bg-white max-w-md w-full p-8 rounded-3xl shadow-xl">
+              <button onClick={() => setView('USER_LOGIN')} className="absolute top-8 left-8 text-slate-400 hover:text-slate-600 mb-6 flex items-center gap-2">
+                <i className="fas fa-arrow-left"></i> Geri
+              </button>
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <i className="fas fa-lock text-3xl"></i>
                 </div>
-              ) : (
-                <div className="grid md:grid-cols-2 gap-4">
-                  {folderContents.map(c => (
-                    <div key={c.id} onClick={() => handleContentClick(c)} className="bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 p-4 rounded-xl cursor-pointer transition group flex items-start gap-4">
-                      <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center text-white ${c.type === 'pdf' ? 'bg-red-500 shadow-md shadow-red-200' : 'bg-blue-500 shadow-md shadow-blue-200'}`}>
-                        <i className={`fas ${c.type === 'pdf' ? 'fa-file-pdf' : 'fa-link'} text-xl`}></i>
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-slate-800 group-hover:text-blue-700 line-clamp-1">{c.title}</h3>
-                        <span className="text-xs font-bold px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-500 mt-1 inline-block">
-                          {c.type === 'pdf' ? 'PDF DOKÜMAN' : 'WEB BAĞLANTISI'}
-                        </span>
-                      </div>
-                    </div>
+                <h3 className="text-xl font-bold text-slate-800">Klasör Şifresi</h3>
+                <p className="text-sm text-slate-500">"{folders.find(f => f.id === selectedFolderId)?.title}" klasörünü (ve yetkili olduğunuz diğer klasörleri) görüntülemek için şifrenizi giriniz.</p>
+              </div>
+              <form onSubmit={handleFolderLogin}>
+                <input
+                  type="password"
+                  autoFocus
+                  className="w-full text-center text-2xl tracking-widest p-3 border-b-2 border-slate-200 focus:border-blue-600 outline-none font-mono mb-6"
+                  placeholder="******"
+                  value={folderKeyInput}
+                  onChange={(e) => setFolderKeyInput(e.target.value)}
+                />
+                <button className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition">Giriş Yap</button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {view === 'USER_FOLDER_VIEW' && navigationStack.length > 0 && (
+          <div className="min-h-screen bg-slate-50">
+            <div className="max-w-7xl mx-auto p-4 py-8">
+              {/* Header with Breadcrumb */}
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex items-center gap-4">
+                <button onClick={handleNavigateBack} className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center hover:bg-slate-200 transition">
+                  <i className="fas fa-arrow-left"></i>
+                </button>
+                <div className="flex items-center gap-2 text-lg font-bold text-slate-700 overflow-x-auto">
+                  <span onClick={() => { setNavigationStack([]); setView('USER_LOGIN'); }} className="cursor-pointer hover:text-blue-600 text-slate-400">Derslerim</span>
+                  {navigationStack.map((f, i) => (
+                    <React.Fragment key={f.id}>
+                      <i className="fas fa-chevron-right text-sm text-slate-300"></i>
+                      <span onClick={() => {
+                        // Navigate to this level
+                        setNavigationStack(prev => prev.slice(0, i + 1));
+                      }} className={`cursor-pointer ${i === navigationStack.length - 1 ? 'text-slate-800' : 'text-slate-400 hover:text-blue-600'}`}>{f.title}</span>
+                    </React.Fragment>
                   ))}
                 </div>
-              )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                {/* Subfolders */}
+                {folders.filter(f => f.parentId === navigationStack[navigationStack.length - 1].id && unlockedFolders.has(f.id)).map(f => (
+                  <button key={f.id} onClick={() => handleFolderClick(f)} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:border-blue-300 flex items-center gap-3 text-left group">
+                    <i className="fas fa-folder text-2xl text-yellow-400 group-hover:scale-110 transition"></i>
+                    <span className="font-bold text-slate-700 group-hover:text-blue-600">{f.title}</span>
+                  </button>
+                ))}
+              </div>
+              {folders.filter(f => f.parentId === navigationStack[navigationStack.length - 1].id && unlockedFolders.has(f.id)).length > 0 && <hr className="my-8 border-slate-200" />}
+
+              {/* Files */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {folderContents.filter(c => c.folderId === navigationStack[navigationStack.length - 1].id).map(item => (
+                  <div key={item.id} onClick={() => handleContentClick(item)} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md cursor-pointer group transition">
+                    <div className="flex items-start gap-4">
+                      <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-white text-xl ${item.type === 'pdf' ? 'bg-red-500' : 'bg-blue-500'}`}>
+                        <i className={`fas ${item.type === 'pdf' ? 'fa-file-pdf' : 'fa-link'}`}></i>
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-800 group-hover:text-blue-600 line-clamp-2">{item.title}</h4>
+                        <span className="text-xs text-slate-400 mt-1 block">{new Date(item.createdAt).toLocaleDateString('tr-TR')}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {folderContents.filter(c => c.folderId === navigationStack[navigationStack.length - 1].id).length === 0 && folders.filter(f => f.parentId === navigationStack[navigationStack.length - 1].id && unlockedFolders.has(f.id)).length === 0 && (
+                  <div className="col-span-3 text-center text-slate-400 py-12 bg-white rounded-xl border border-dashed border-slate-200">
+                    Bu klasörde henüz içerik yok.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

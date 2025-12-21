@@ -44,6 +44,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   // Folder Key inputs
   const [newFolderKey, setNewFolderKey] = useState('');
   const [newFolderKeyNote, setNewFolderKeyNote] = useState('');
+  const [selectedFolderIdsForKey, setSelectedFolderIdsForKey] = useState<string[]>([]);
+  const [keyExpiresAt, setKeyExpiresAt] = useState('');
 
   useEffect(() => {
     refreshData();
@@ -60,11 +62,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     const foldersData = await StorageService.getFolders();
     setFolders(foldersData);
 
-    // If a folder is active, refresh its content and keys
+    // If a folder is active, refresh its content
     if (activeFolderId) {
       setFolderContents(await StorageService.getFolderContent(activeFolderId));
-      setFolderKeys(await StorageService.getFolderKeys(activeFolderId));
     }
+    // Refresh ALL keys (they are now global)
+    setFolderKeys(await StorageService.getFolderKeys());
 
     setIsLoading(false);
   };
@@ -132,7 +135,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     e.preventDefault();
     if (!newFolderTitle) return;
     setIsLoading(true);
-    await StorageService.createFolder(newFolderTitle);
+    // Create folder as child of activeFolderId if exists, or root
+    await StorageService.createFolder(newFolderTitle, activeFolderId);
     setNewFolderTitle('');
     await refreshData();
     setIsLoading(false);
@@ -151,8 +155,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const handleSelectFolder = async (id: string) => {
     setActiveFolderId(id);
     setIsLoading(true);
+    // Refresh content for new active folder
     setFolderContents(await StorageService.getFolderContent(id));
-    setFolderKeys(await StorageService.getFolderKeys(id));
+    // Keys are global now, but we could filter if we wanted. For now keeping global list.
     setIsLoading(false);
   };
 
@@ -201,11 +206,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
   const handleCreateFolderKey = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeFolderId || !newFolderKey) return;
+    if (selectedFolderIdsForKey.length === 0 || !newFolderKey) {
+      alert("Lütfen en az bir klasör ve şifre girin.");
+      return;
+    }
     try {
-      await StorageService.createFolderKey(activeFolderId, newFolderKey, newFolderKeyNote);
-      setNewFolderKey(''); setNewFolderKeyNote('');
-      setFolderKeys(await StorageService.getFolderKeys(activeFolderId));
+      await StorageService.createFolderKey(
+        selectedFolderIdsForKey,
+        newFolderKey,
+        newFolderKeyNote,
+        keyExpiresAt ? new Date(keyExpiresAt) : null
+      );
+      setNewFolderKey(''); setNewFolderKeyNote(''); setKeyExpiresAt(''); setSelectedFolderIdsForKey([]);
+      setFolderKeys(await StorageService.getFolderKeys());
       alert('Şifre oluşturuldu.');
     } catch (e) {
       alert('Hata: Şifre çakışması olabilir.');
@@ -215,7 +228,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const handleDeleteFolderKey = async (id: string) => {
     if (!confirm('Bu şifreyi silmek istediğinize emin misiniz?')) return;
     await StorageService.deleteFolderKey(id);
-    if (activeFolderId) setFolderKeys(await StorageService.getFolderKeys(activeFolderId));
+    setFolderKeys(await StorageService.getFolderKeys());
   };
 
 
@@ -310,33 +323,54 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       ) : (
         // --- NEW COURSES VIEW ---
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Sidebar: Folders */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          {/* Sidebar: Folders Tree */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 lg:col-span-1">
             <h2 className="text-lg font-bold text-slate-700 mb-4">Ders Klasörleri</h2>
-            <form onSubmit={handleCreateFolder} className="flex gap-2 mb-6">
-              <input type="text" placeholder="Yeni Ders Adı" className="w-full border p-2 rounded text-sm" value={newFolderTitle} onChange={(e) => setNewFolderTitle(e.target.value)} />
-              <button className="bg-blue-600 text-white px-3 rounded hover:bg-blue-700">+</button>
+
+            {/* Create Folder Form */}
+            <form onSubmit={handleCreateFolder} className="mb-6 border-b pb-4">
+              <label className="text-xs font-bold text-slate-500 block mb-1">Yeni Klasör Oluştur</label>
+              <div className="text-xs text-blue-500 mb-2">
+                {activeFolderId ? `"${folders.find(f => f.id === activeFolderId)?.title}" içine` : 'Ana Dizin'}
+              </div>
+              <div className="flex gap-2">
+                <input type="text" placeholder="Klasör Adı" className="w-full border p-2 rounded text-sm" value={newFolderTitle} onChange={(e) => setNewFolderTitle(e.target.value)} />
+                <button className="bg-blue-600 text-white px-3 rounded hover:bg-blue-700">+</button>
+              </div>
+              {activeFolderId && (
+                <button type="button" onClick={() => setActiveFolderId(null)} className="text-xs text-red-500 mt-2 underline">Ana Dizine Dön</button>
+              )}
             </form>
+
+            {/* Folder List (Filtered by Parent) */}
             <ul className="space-y-2">
-              {folders.map(f => (
+              {folders.filter(f => f.parentId === activeFolderId).length === 0 && <p className="text-xs text-slate-400 italic">Bu klasör boş.</p>}
+              {folders.filter(f => f.parentId === activeFolderId).map(f => (
                 <li key={f.id}
                   onClick={() => handleSelectFolder(f.id)}
                   className={`p-3 rounded-lg cursor-pointer flex justify-between items-center transition ${activeFolderId === f.id ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'hover:bg-slate-50 text-slate-600'}`}
                 >
-                  <span className="font-medium truncate"><i className={`fas ${activeFolderId === f.id ? 'fa-folder-open' : 'fa-folder'} mr-2`}></i>{f.title}</span>
-                  <button onClick={(e) => { e.stopPropagation(); handleDeleteFolder(f.id); }} className="text-slate-400 hover:text-red-500"><i className="fas fa-trash-alt"></i></button>
+                  <span className="font-medium truncate flex-1"><i className={`fas ${activeFolderId === f.id ? 'fa-folder-open' : 'fa-folder'} mr-2`}></i>{f.title}</span>
+                  <button onClick={(e) => { e.stopPropagation(); handleDeleteFolder(f.id); }} className="text-slate-400 hover:text-red-500 px-2"><i className="fas fa-trash-alt"></i></button>
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* Main Content: Folder Details */}
+          {/* Main Content: Folder Details & Key Management */}
           <div className="lg:col-span-3 space-y-8">
             {activeFolderId ? (
               <>
+                {/* Folder Header */}
+                <div className="flex items-center gap-2 text-slate-500 text-sm mb-2">
+                  <span onClick={() => setActiveFolderId(null)} className="cursor-pointer hover:underline">Ana Dizin</span>
+                  <i className="fas fa-chevron-right text-xs"></i>
+                  <span className="font-bold text-slate-800">{folders.find(f => f.id === activeFolderId)?.title}</span>
+                </div>
+
                 {/* Add Content Section */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                  <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">İçerik Ekle ({folders.find(f => f.id === activeFolderId)?.title})</h3>
+                  <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">İçerik Ekle</h3>
                   <form onSubmit={handleAddItemToFolder} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                     <div className="md:col-span-3">
                       <label className="text-xs font-bold text-slate-500">Tür</label>
@@ -382,51 +416,101 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                     )}
                   </div>
                 </div>
-
-                {/* Keys Section */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                  <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Bu Sınıf İçin Erişimi Anahtarları</h3>
-                  <p className="text-sm text-slate-500 mb-4">Bu klasöre erişmesini istediğiniz her öğrenci için özel bir şifre oluşturun.</p>
-
-                  <form onSubmit={handleCreateFolderKey} className="flex gap-4 items-end mb-6">
-                    <div className="flex-1">
-                      <label className="text-xs font-bold text-slate-500">Şifre (Otomatik veya Manuel)</label>
-                      <input type="text" className="w-full border p-2 rounded font-mono" value={newFolderKey} onChange={(e) => setNewFolderKey(e.target.value)} placeholder="Örn: AHMET123" required />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-xs font-bold text-slate-500">Öğrenci Notu</label>
-                      <input type="text" className="w-full border p-2 rounded" value={newFolderKeyNote} onChange={(e) => setNewFolderKeyNote(e.target.value)} placeholder="Örn: Ahmet Yılmaz" />
-                    </div>
-                    <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold">Oluştur</button>
-                  </form>
-
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-600"><th className="p-2">Şifre</th><th className="p-2">Not</th><th className="p-2 text-right">Sil</th></tr>
-                    </thead>
-                    <tbody>
-                      {folderKeys.map(k => (
-                        <tr key={k.id} className="border-b">
-                          <td className="p-2 font-mono font-bold text-blue-600">{k.keyCode}</td>
-                          <td className="p-2">{k.note || '-'}</td>
-                          <td className="p-2 text-right"><button onClick={() => handleDeleteFolderKey(k.id)} className="text-red-500"><i className="fas fa-trash"></i></button></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
               </>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400 p-12 border-2 border-dashed border-slate-200 rounded-xl">
-                <i className="fas fa-folder-open text-6xl mb-4 text-slate-200"></i>
-                <p>İşlem yapmak için soldan bir ders klasörü seçin veya yeni oluşturun.</p>
+              <div className="bg-blue-50 p-6 rounded-xl border border-blue-100 text-blue-800 mb-8">
+                <p><i className="fas fa-info-circle mr-2"></i> Soldan bir klasör seçerek içine dosya yükleyebilirsiniz. Şifre yönetimi için aşağıya bakın.</p>
               </div>
             )}
+
+            {/* GLOBAL KEY MANAGEMENT SECTION */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+              <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Şifre Yönetimi</h3>
+              <p className="text-sm text-slate-500 mb-4">Buradan oluşturacağınız şifreler, seçeceğiniz klasörlere erişim sağlar.</p>
+
+              <form onSubmit={handleCreateFolderKey} className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                {/* Left: Key Details */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 block mb-1">Şifre</label>
+                    <input type="text" className="w-full border p-2 rounded font-mono font-bold text-lg text-blue-600" value={newFolderKey} onChange={(e) => setNewFolderKey(e.target.value)} placeholder="Örn: 2025DERS" required />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 block mb-1">Not / Öğrenci Adı</label>
+                    <input type="text" className="w-full border p-2 rounded" value={newFolderKeyNote} onChange={(e) => setNewFolderKeyNote(e.target.value)} placeholder="Örn: Tüm Sınıf" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 block mb-1">Geçerlilik Süresi (Opsiyonel)</label>
+                    <input type="datetime-local" className="w-full border p-2 rounded text-sm" value={keyExpiresAt} onChange={(e) => setKeyExpiresAt(e.target.value)} />
+                    <p className="text-xs text-slate-400 mt-1">Boş bırakılırsa süresiz olur.</p>
+                  </div>
+                </div>
+
+                {/* Right: Folder Selection */}
+                <div>
+                  <label className="text-xs font-bold text-slate-500 block mb-2">Erişilebilecek Klasörler</label>
+                  <div className="max-h-48 overflow-y-auto border rounded bg-white p-2 space-y-1">
+                    {folders.map(f => (
+                      <label key={f.id} className="flex items-center gap-2 p-1 hover:bg-slate-50 cursor-pointer text-sm">
+                        <input
+                          type="checkbox"
+                          checked={selectedFolderIdsForKey.includes(f.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedFolderIdsForKey(prev => [...prev, f.id]);
+                            else setSelectedFolderIdsForKey(prev => prev.filter(id => id !== f.id));
+                          }}
+                          className="rounded text-blue-600"
+                        />
+                        <i className="fas fa-folder text-yellow-400"></i>
+                        {f.title}
+                      </label>
+                    ))}
+                    {folders.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Hiç klasör yok.</p>}
+                  </div>
+                  <div className="mt-4">
+                    <button className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 font-bold shadow-md shadow-blue-200">Şifre Oluştur</button>
+                  </div>
+                </div>
+              </form>
+
+              {/* Keys List */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-600 border-b"><th className="p-3">Şifre</th><th className="p-3">Kapsam</th><th className="p-3">Not</th><th className="p-3">Bitiş</th><th className="p-3 text-right">Sil</th></tr>
+                  </thead>
+                  <tbody>
+                    {folderKeys.map(k => (
+                      <tr key={k.id} className="border-b hover:bg-slate-50">
+                        <td className="p-3 font-mono font-bold text-blue-600 text-lg">{k.keyCode}</td>
+                        <td className="p-3">
+                          <div className="flex flex-wrap gap-1 max-w-xs">
+                            {k.folderIds?.map(fid => {
+                              const f = folders.find(fo => fo.id === fid);
+                              return f ? <span key={fid} className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded border border-yellow-200">{f.title}</span> : null;
+                            })}
+                            {(!k.folderIds || k.folderIds.length === 0) && <span className="text-xs text-red-400">Klasör Yok</span>}
+                          </div>
+                        </td>
+                        <td className="p-3 text-slate-600">{k.note || '-'}</td>
+                        <td className="p-3">
+                          {k.expiresAt ? (
+                            <span className={`text-xs font-bold px-2 py-1 rounded ${k.expiresAt < Date.now() ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                              {new Date(k.expiresAt).toLocaleString()}
+                            </span>
+                          ) : <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded">Süresiz</span>}
+                        </td>
+                        <td className="p-3 text-right"><button onClick={() => handleDeleteFolderKey(k.id)} className="text-red-500 hover:bg-red-50 p-2 rounded transition"><i className="fas fa-trash"></i></button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 };
-
 export default AdminDashboard;

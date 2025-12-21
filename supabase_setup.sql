@@ -21,6 +21,7 @@ create table if not exists access_keys (
 -- NEW: Folders Table for "Derslerim"
 create table if not exists folders (
   id uuid default uuid_generate_v4() primary key,
+  parent_id uuid references folders(id) on delete cascade, -- Support for nested folders
   title text not null,
   is_active boolean default true,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
@@ -39,8 +40,9 @@ create table if not exists folder_content (
 -- NEW: Folder Access Keys (Specific passwords for folders)
 create table if not exists folder_keys (
   id uuid default uuid_generate_v4() primary key,
-  folder_id uuid references folders(id) on delete cascade,
+  folder_ids uuid[] not null, -- Array of folder IDs this key unlocks
   key_code text unique not null,
   note text, -- e.g. Student Name
+  expires_at timestamp with time zone, -- Optional expiration
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );

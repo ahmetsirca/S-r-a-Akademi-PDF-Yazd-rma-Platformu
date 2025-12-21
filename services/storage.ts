@@ -164,14 +164,18 @@ export const StorageService = {
     const { data } = await supabase.from('folders').select('*').order('created_at', { ascending: false });
     return (data || []).map((f: any) => ({
       id: f.id,
+      parentId: f.parent_id,
       title: f.title,
       isActive: f.is_active,
       createdAt: new Date(f.created_at).getTime()
     }));
   },
 
-  createFolder: async (title: string) => {
-    const { data, error } = await supabase.from('folders').insert({ title }).select().single();
+  createFolder: async (title: string, parentId: string | null = null) => {
+    const { data, error } = await supabase.from('folders').insert({
+      title,
+      parent_id: parentId // Handle nested folder creation
+    }).select().single();
     if (error) throw error;
     return data;
   },
@@ -224,22 +228,25 @@ export const StorageService = {
   },
 
   // Folder Keys
-  getFolderKeys: async (folderId: string): Promise<import('../types').FolderKey[]> => {
-    const { data } = await supabase.from('folder_keys').select('*').eq('folder_id', folderId);
+  getFolderKeys: async (): Promise<import('../types').FolderKey[]> => {
+    // Fetch ALL keys, filtering will happen in UI or we can add args if needed
+    const { data } = await supabase.from('folder_keys').select('*').order('created_at', { ascending: false });
     return (data || []).map((k: any) => ({
       id: k.id,
-      folderId: k.folder_id,
+      folderIds: k.folder_ids || [], // Handle array
       keyCode: k.key_code,
       note: k.note,
+      expiresAt: k.expires_at ? new Date(k.expires_at).getTime() : null,
       createdAt: new Date(k.created_at).getTime()
     }));
   },
 
-  createFolderKey: async (folderId: string, keyCode: string, note: string) => {
+  createFolderKey: async (folderIds: string[], keyCode: string, note: string, expiresAt: Date | null) => {
     const { error } = await supabase.from('folder_keys').insert({
-      folder_id: folderId,
+      folder_ids: folderIds,
       key_code: keyCode,
-      note
+      note,
+      expires_at: expiresAt ? expiresAt.toISOString() : null
     });
     if (error) throw error;
   },
@@ -248,13 +255,33 @@ export const StorageService = {
     await supabase.from('folder_keys').delete().eq('id', keyId);
   },
 
-  // Verify Folder Key
-  verifyFolderKey: async (folderId: string, keyCode: string): Promise<boolean> => {
-    const { data } = await supabase.from('folder_keys')
-      .select('id')
-      .eq('folder_id', folderId)
+  // Verify Folder Key - Returns the Key object if valid, null otherwise
+  verifyFolderKey: async (folderId: string, keyCode: string): Promise<import('../types').FolderKey | null> => {
+    // 1. Find key
+    const { data: keyData } = await supabase.from('folder_keys')
+      .select('*')
       .eq('key_code', keyCode)
       .maybeSingle();
-    return !!data;
+
+    if (!keyData) return null;
+
+    // 2. Check if key includes this folder
+    const folderIds: string[] = keyData.folder_ids || [];
+    if (!folderIds.includes(folderId)) return null;
+
+    // 3. Check expiration
+    if (keyData.expires_at) {
+      const expiry = new Date(keyData.expires_at).getTime();
+      if (Date.now() > expiry) return null; // Expired
+    }
+
+    return {
+      id: keyData.id,
+      folderIds: keyData.folder_ids,
+      keyCode: keyData.key_code,
+      note: keyData.note,
+      expiresAt: keyData.expires_at ? new Date(keyData.expires_at).getTime() : null,
+      createdAt: new Date(keyData.created_at).getTime()
+    };
   }
 };
