@@ -220,8 +220,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       setNewFolderKey(''); setNewFolderKeyNote(''); setKeyExpiresAt(''); setSelectedFolderIdsForKey([]);
       setFolderKeys(await StorageService.getFolderKeys());
       alert('Şifre oluşturuldu.');
-    } catch (e) {
-      alert('Hata: Şifre çakışması olabilir.');
+    } catch (e: any) {
+      console.error(e);
+      alert('Hata: ' + (e.message || 'Şifre çakışması veya bağlantı hatası.'));
     }
   };
 

@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ViewState, PDFBook, AccessKey } from './types';
 import { StorageService } from './services/storage';
 import AdminDashboard from './components/AdminDashboard';
@@ -19,7 +18,7 @@ const App: React.FC = () => {
   const [folderContent, setFolderContent] = useState<import('./types').FolderContent[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [folderKeyInput, setFolderKeyInput] = useState('');
-  const [selectedContent, setSelectedContent] = useState<import('./types').FolderContent | null>(null);
+  // const [selectedContent, setSelectedContent] = useState<import('./types').FolderContent | null>(null); // Unused currently
 
   // Navigation & Security State
   const [navigationStack, setNavigationStack] = useState<import('./types').Folder[]>([]);
@@ -32,15 +31,6 @@ const App: React.FC = () => {
 
   const fetchInitialData = async () => {
     setFolders(await StorageService.getFolders());
-    // We might need to fetch ALL content upfront or lazy load. For this size, fetching all is fine or fetch by folder.
-    // However, existing logic passed 'folderId' to getFolderContent. 
-    // Let's modify to fetch all or we'll need to fetch dynamically.
-    // For simplicity, let's lazy load content when entering a folder? 
-    // Or just fetch all contents for now if dataset is small.
-    // Let's stick to lazy-ish: 
-    // Actually, getting ALL content might be easier for search/filter later.
-    // But currently `getFolderContent` takes ID.
-    // Let's update `handleFolderLogin` to fetch content.
   };
 
   const handleAdminLogin = (e: React.FormEvent) => {
@@ -126,33 +116,6 @@ const App: React.FC = () => {
     } catch (err) {
       console.error(err);
       alert('Bir hata oluştu.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // -- FOLDER HANDLERS --
-  const handleFolderClick = (folderId: string) => {
-    setSelectedFolderId(folderId);
-    setFolderKeyInput('');
-  };
-
-  const handleFolderLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedFolderId) return;
-    setIsLoading(true);
-    try {
-      const isValid = await StorageService.verifyFolderKey(selectedFolderId, folderKeyInput);
-      if (isValid) {
-        setOpenFolderId(selectedFolderId);
-        setFolderContents(await StorageService.getFolderContent(selectedFolderId));
-        setSelectedFolderId(null); // Close modal
-        setView('USER_FOLDER_VIEW'); // Switch view
-      } else {
-        alert('Hatalı Şifre!');
-      }
-    } catch (e) {
-      alert('Hata');
     } finally {
       setIsLoading(false);
     }
@@ -267,10 +230,11 @@ const App: React.FC = () => {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {folders.map(f => (
+                    {/* Only Show Root Folders (parentId is null or 'root' if we used that, assuming null for root) */}
+                    {folders.filter(f => !f.parentId).map(f => (
                       <div
                         key={f.id}
-                        onClick={() => handleFolderClick(f.id)}
+                        onClick={() => handleFolderClick(f)}
                         className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-blue-300 transition group"
                       >
                         <div className="flex justify-between items-center">
@@ -364,18 +328,18 @@ const App: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 {/* Subfolders */}
-                {folders.filter(f => f.parentId === navigationStack[navigationStack.length - 1].id && unlockedFolders.has(f.id)).map(f => (
+                {folders.filter(f => f.parentId === navigationStack[navigationStack.length - 1].id && unlockedFolderIds.includes(f.id)).map(f => (
                   <button key={f.id} onClick={() => handleFolderClick(f)} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:border-blue-300 flex items-center gap-3 text-left group">
                     <i className="fas fa-folder text-2xl text-yellow-400 group-hover:scale-110 transition"></i>
                     <span className="font-bold text-slate-700 group-hover:text-blue-600">{f.title}</span>
                   </button>
                 ))}
               </div>
-              {folders.filter(f => f.parentId === navigationStack[navigationStack.length - 1].id && unlockedFolders.has(f.id)).length > 0 && <hr className="my-8 border-slate-200" />}
+              {folders.filter(f => f.parentId === navigationStack[navigationStack.length - 1].id && unlockedFolderIds.includes(f.id)).length > 0 && <hr className="my-8 border-slate-200" />}
 
               {/* Files */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {folderContents.filter(c => c.folderId === navigationStack[navigationStack.length - 1].id).map(item => (
+                {folderContent.filter(c => c.folderId === navigationStack[navigationStack.length - 1].id).map(item => (
                   <div key={item.id} onClick={() => handleContentClick(item)} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md cursor-pointer group transition">
                     <div className="flex items-start gap-4">
                       <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-white text-xl ${item.type === 'pdf' ? 'bg-red-500' : 'bg-blue-500'}`}>
@@ -388,7 +352,7 @@ const App: React.FC = () => {
                     </div>
                   </div>
                 ))}
-                {folderContents.filter(c => c.folderId === navigationStack[navigationStack.length - 1].id).length === 0 && folders.filter(f => f.parentId === navigationStack[navigationStack.length - 1].id && unlockedFolders.has(f.id)).length === 0 && (
+                {folderContent.filter(c => c.folderId === navigationStack[navigationStack.length - 1].id).length === 0 && folders.filter(f => f.parentId === navigationStack[navigationStack.length - 1].id && unlockedFolderIds.includes(f.id)).length === 0 && (
                   <div className="col-span-3 text-center text-slate-400 py-12 bg-white rounded-xl border border-dashed border-slate-200">
                     Bu klasörde henüz içerik yok.
                   </div>
