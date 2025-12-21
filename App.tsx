@@ -142,7 +142,7 @@ const App: React.FC = () => {
               <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 aspect-video mx-4 md:mx-0 relative">
                 <iframe
                   className="absolute inset-0 w-full h-full"
-                  src="https://www.youtube.com/embed?listType=user_uploads&list=komiserimpaemisyon"
+                  src="https://www.youtube.com/embed?listType=search&list=Komiserim%20Paemisyon"
                   title="YouTube video player"
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
