@@ -142,7 +142,7 @@ const App: React.FC = () => {
               <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 aspect-video mx-4 md:mx-0 relative">
                 <iframe
                   className="absolute inset-0 w-full h-full"
-                  src="https://www.youtube.com/embed?listType=search&list=Komiserim%20Paemisyon"
+                  src="https://www.youtube.com/embed?listType=playlist&list=UUn0-i6aD3_0B4oQ_k9X7uQw"
                   title="YouTube video player"
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -195,14 +195,16 @@ const App: React.FC = () => {
       </main>
 
       {/* Footer with credit */}
-      {view !== 'USER_VIEWER' && (
-        <footer className="mt-20 text-center pb-8 px-4">
-          <p className="text-slate-800 font-bold mb-1">SIRÇA AKADEMİ (KOMİSERİM PAEMİSYON)</p>
-          <p className="text-blue-600 font-medium mb-4">Uygulama Şuheda SIRÇA tarafından yapılmıştır.</p>
-          <p className="text-slate-400 text-xs">© 2025 • Güvenli Belge Dağıtım Sistemi</p>
-        </footer>
-      )}
-    </div>
+      {
+        view !== 'USER_VIEWER' && (
+          <footer className="mt-20 text-center pb-8 px-4">
+            <p className="text-slate-800 font-bold mb-1">SIRÇA AKADEMİ (KOMİSERİM PAEMİSYON)</p>
+            <p className="text-blue-600 font-medium mb-4">Uygulama Şuheda SIRÇA tarafından yapılmıştır.</p>
+            <p className="text-slate-400 text-xs">© 2025 • Güvenli Belge Dağıtım Sistemi</p>
+          </footer>
+        )
+      }
+    </div >
   );
 };
 
