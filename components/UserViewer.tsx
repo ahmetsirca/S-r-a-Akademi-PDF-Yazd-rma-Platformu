@@ -25,6 +25,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
   const scrollTimeout = useRef<any>(null);
   const [annotations, setAnnotations] = useState<Record<number, { x: number, y: number }[][]>>({});
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState<number>(window.innerWidth);
   const isDrawing = useRef(false);
   const currentPath = useRef<{ x: number, y: number }[]>([]);
 
@@ -143,11 +145,35 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
     });
   };
 
+
   const clearPage = () => {
     if (confirm('Sayfa temizlensin mi?')) setAnnotations(prev => ({ ...prev, [pageNumber]: [] }));
   };
 
-  // Load Content
+  // Responsive Width Handler
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.clientWidth);
+      }
+    };
+
+    // Initial check
+    updateWidth();
+
+    // Resize observer is better than window resize for specific elements
+    const observer = new ResizeObserver(() => {
+      updateWidth();
+    });
+
+    if (containerRef.current) observer.observe(containerRef.current);
+
+    window.addEventListener('resize', updateWidth); // Fallback/Additional check
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateWidth);
+    }
+  }, []);
   useEffect(() => {
     const loadContent = async () => {
       if (book.sourceType === 'FILE' && book.pdfData) {
@@ -474,6 +500,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
 
       {/* Content */}
       <div
+        ref={containerRef}
         className="flex-1 relative bg-slate-500 overflow-auto flex justify-center p-4 outline-none pb-24" // Added pb-24 for mobile nav space
         style={{ overscrollBehavior: 'none' }}
         onWheel={handleWheel}
@@ -495,7 +522,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
             >
               <Page
                 pageNumber={pageNumber}
-                scale={scale}
+                scale={scale} // Scale is now relative to the fit-width
+                width={containerWidth ? Math.min(containerWidth - 32, 1200) : undefined} // Fit width minus padding, capped at 1200px
                 renderAnnotationLayer={false}
                 renderTextLayer={true}
                 className="shadow-2xl relative"
@@ -530,11 +558,12 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
           - If DrawMode is OFF: Show Page Navigation (Prev/Next/Input)
           - Toggle Button is always visible
       */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 z-[60] w-full px-4 pointer-events-none">
+      {/* Mobile Bottom Navigation & Toolbar Container */}
+      <div className="fixed bottom-0 left-0 w-full pointer-events-none z-[60] flex flex-col items-center justify-end pb-6">
 
         {/* Navigation Bar (Visible only when NOT drawing) */}
         {!drawMode && (
-          <div className="pointer-events-auto bg-slate-800/90 backdrop-blur-md border border-slate-600 p-2 rounded-2xl shadow-xl flex items-center gap-4 animate-slide-up">
+          <div className="pointer-events-auto bg-slate-800/90 backdrop-blur-md border border-slate-600 p-2 rounded-2xl shadow-xl flex items-center gap-4 animate-slide-up mb-2">
             <button
               disabled={pageNumber <= 1}
               onClick={() => changePage(-1)}
@@ -566,37 +595,39 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
           </div>
         )}
 
-        {/* Floating Tools Row */}
-        <div className="pointer-events-auto bg-slate-800/90 backdrop-blur-md border border-slate-600 p-2 rounded-full shadow-2xl flex items-center gap-2 transition-transform duration-300">
-          <button
-            onClick={() => setDrawMode(!drawMode)}
-            className={`w-12 h-12 rounded-full flex items-center justify-center text-xl transition ${drawMode ? 'bg-yellow-500 text-slate-900 shadow-[0_0_15px_rgba(234,179,8,0.5)] scale-110' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-              }`}
-          >
-            <i className={`fas ${drawMode ? 'fa-pen-nib' : 'fa-pen'}`}></i>
-          </button>
-
-          {drawMode && (
-            <>
-              <div className="w-px h-8 bg-slate-600 mx-1"></div>
-              <button
-                onClick={undoAnnotation}
-                className="w-10 h-10 rounded-full flex items-center justify-center text-slate-300 hover:bg-slate-700 hover:text-white transition active:scale-95"
-                title="Geri Al"
-              >
-                <i className="fas fa-undo"></i>
-              </button>
-              <button
-                onClick={clearPage}
-                className="w-10 h-10 rounded-full flex items-center justify-center text-red-400 hover:bg-red-500/20 transition active:scale-95"
-                title="Temizle"
-              >
-                <i className="fas fa-trash"></i>
-              </button>
-            </>
-          )}
-        </div>
+        {/* Drawing Tools (Undo/Clear) - Visible ONLY when drawing */}
+        {drawMode && (
+          <div className="pointer-events-auto bg-slate-800/90 backdrop-blur-md border border-slate-600 p-2 rounded-full shadow-2xl flex items-center gap-2 animate-slide-up mb-2">
+            <button
+              onClick={undoAnnotation}
+              className="w-12 h-12 rounded-full flex items-center justify-center text-slate-300 hover:bg-slate-700 hover:text-white transition active:scale-95 bg-slate-700/50"
+              title="Geri Al"
+            >
+              <i className="fas fa-undo"></i>
+            </button>
+            <div className="w-px h-8 bg-slate-600 mx-1"></div>
+            <button
+              onClick={clearPage}
+              className="w-12 h-12 rounded-full flex items-center justify-center text-red-400 hover:bg-red-500/20 transition active:scale-95 bg-red-500/10"
+              title="Temizle"
+            >
+              <i className="fas fa-trash"></i>
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* Floating Action Button (FAB) for Draw Toggle - Always visible, Bottom-Right */}
+      <button
+        onClick={() => setDrawMode(!drawMode)}
+        className={`fixed bottom-24 right-6 w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-2xl z-[70] transition-all duration-300 active:scale-90 ${drawMode
+          ? 'bg-yellow-500 text-slate-900 border-4 border-slate-900 rotate-0'
+          : 'bg-indigo-600 text-white hover:bg-indigo-500 rotate-0'
+          }`}
+        title={drawMode ? "Çizimi Bitir" : "Çizimi Başlat"}
+      >
+        <i className={`fas ${drawMode ? 'fa-check' : 'fa-pen'}`}></i>
+      </button>
 
       {/* Success Modal */}
       {
