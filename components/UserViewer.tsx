@@ -208,7 +208,13 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
           setPdfUrl(book.pdfData || null);
         }
       } else if (book.sourceType === 'LINK' && book.sourceUrl) {
+        // If it's a link, we can try to use it directly. 
+        // However, if it's a Cross-Origin link that isn't CORS enabled, <Document> might fail.
+        // There isn't an easy client-side fix for CORS other than a proxy.
         setPdfUrl(book.sourceUrl);
+      } else {
+        // Fallback: If unknown, try pdfData
+        setPdfUrl(book.pdfData || book.sourceUrl || null);
       }
     };
     loadContent();

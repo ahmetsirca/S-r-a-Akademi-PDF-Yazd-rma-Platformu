@@ -194,13 +194,14 @@ const App: React.FC = () => {
       window.open(content.url, '_blank');
     } else {
       // Open PDF in Secure Viewer
+      // Open PDF in Secure Viewer
       const mockBook: PDFBook = {
         id: content.id,
         name: content.title,
         collectionId: content.folderId,
-        sourceType: 'FILE',
+        sourceType: content.url.includes('http') || content.type === 'link' ? 'LINK' : 'FILE', // Auto-detect for safety, or we should pass it
         sourceUrl: content.url,
-        pdfData: content.url, // Assuming URL for file content
+        pdfData: content.url, // For FILE type, viewer attempts to fetch this
         createdAt: Date.now()
       };
 
