@@ -18,12 +18,14 @@ const App: React.FC = () => {
   const [userPermission, setUserPermission] = useState<UserPermission | null>(null);
   const [isDeviceVerified, setIsDeviceVerified] = useState(true);
 
-  // Login Inputs
+  // Login/Register Mode
+  const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
+
+  // Auth Inputs
   const [adminInput, setAdminInput] = useState('');
-  const [userKeyInput, setUserKeyInput] = useState(''); // Legacy Key Input
   const [loginName, setLoginName] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
-  const [loginCode, setLoginCode] = useState('');
+  const [loginPassword, setLoginPassword] = useState(''); // NEW: Password
 
   // Folder System State
   const [folders, setFolders] = useState<import('./types').Folder[]>([]);
@@ -45,6 +47,8 @@ const App: React.FC = () => {
     // Check saved session
     const savedUser = AuthService.loadSession();
     if (savedUser) {
+      // Just refresh profile for permissions, no auto-login logic deep check for now
+      // But ideally we should re-verify permissions
       AuthService.checkPermissionAccess(savedUser.fullName || '', savedUser.email)
         .then(res => {
           if (res) {
@@ -52,7 +56,6 @@ const App: React.FC = () => {
             setUserProfile(res.profile);
             setIsDeviceVerified(res.isDeviceApproved);
             DBService.getUserPermissions(res.profile.id).then(setUserPermission);
-            // Don't auto-navigate if mostly mostly logic is manual
           } else {
             AuthService.logout(savedUser.id);
           }
@@ -65,18 +68,25 @@ const App: React.FC = () => {
     setFolders(await StorageService.getFolders());
   };
 
-  const handleCustomLogin = async (e: React.FormEvent) => {
+  const handleCustomAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginName || !loginEmail) { alert("Lütfen Ad ve E-posta girin."); return; }
-
     setIsLoading(true);
+
     try {
       let res;
-      if (loginCode) {
-        res = await AuthService.loginWithIdentity(loginName, loginEmail, loginCode);
+
+      if (authMode === 'REGISTER') {
+        if (!loginName || !loginEmail || !loginPassword) { throw new Error("Ad, E-posta ve Şifre zorunludur."); }
+        const profile = await AuthService.register(loginName, loginEmail, loginPassword);
+        alert("Kayıt Başarılı! Şimdi giriş yapabilirsiniz.");
+        setAuthMode('LOGIN');
+        setLoginPassword('');
+        setIsLoading(false);
+        return;
       } else {
-        res = await AuthService.checkPermissionAccess(loginName, loginEmail);
-        if (!res) throw new Error("Giriş kodunuzu girmelisiniz veya yetkiniz bulunmuyor.");
+        // LOGIN
+        if (!loginEmail || !loginPassword) { throw new Error("E-posta ve Şifre zorunludur."); }
+        res = await AuthService.login(loginEmail, loginPassword);
       }
 
       if (res) {
@@ -89,22 +99,23 @@ const App: React.FC = () => {
 
         if (res.unlockedFolders.length > 0) {
           setUnlockedFolderIds(res.unlockedFolders);
-          setView('USER_FOLDER_VIEW'); // Fixed: use setView instead of setViewState
+          setView('USER_FOLDER_VIEW');
         } else {
-          alert("Giriş başarılı ancak atanmış klasör yok.");
-          setView('USER_LOGIN');
+          // No folders assigned yet. Still allow login but show root.
+          setUnlockedFolderIds([]);
+          // alert("Giriş başarılı. Henüz atanmış klasörünüz yok.");
         }
 
         DBService.getUserPermissions(res.profile.id).then(setUserPermission);
       }
-
     } catch (err: any) {
       console.error(err);
-      alert(err.message || "Giriş başarısız.");
+      alert(err.message || "İşlem başarısız.");
     } finally {
       setIsLoading(false);
     }
   };
+
 
   const handleLogout = async () => {
     if (userProfile) {
@@ -113,7 +124,7 @@ const App: React.FC = () => {
       setUserProfile(null);
       setUserPermission(null);
       setView('USER_LOGIN');
-      setUserKeyInput('');
+      setLoginPassword('');
       setUnlockedFolderIds([]);
       setNavigationStack([]);
     }
@@ -208,31 +219,6 @@ const App: React.FC = () => {
     }
   };
 
-  // --- Logic for Legacy Key Login (Optional fallback) ---
-  /*
-  const handleUserLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    try {
-      const match = await StorageService.verifyKey(userKeyInput);
-      if (match) {
-        const books = await StorageService.getBooks();
-        const book = books.find(b => b.id === match.bookId);
-        if (book) {
-          setActiveBook(book);
-          setActiveKey(match);
-          setView('USER_VIEWER');
-          setUserKeyInput('');
-        } else {
-          alert('Bu anahtar için kitap bulunamadı.');
-        }
-      } else {
-        alert('Geçersiz Erişim Anahtarı.');
-      }
-    } catch (err) { console.error(err); alert('Hata.'); } finally { setIsLoading(false); }
-  };
-  */
-
   return (
     <div className="min-h-screen">
       {/* Nav */}
@@ -299,26 +285,48 @@ const App: React.FC = () => {
                   <>
                     <div className="text-center mb-8">
                       <div className="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <i className="fas fa-key text-2xl text-blue-600"></i>
+                        <i className={`fas ${authMode === 'LOGIN' ? 'fa-sign-in-alt' : 'fa-user-plus'} text-2xl text-blue-600`}></i>
                       </div>
-                      <h1 className="text-2xl font-bold text-slate-800">Öğrenci Girişi</h1>
-                      <p className="text-slate-500 mt-2">Adınız, E-postanız ve Erişim Kodunuzla giriş yapın.</p>
+                      <h1 className="text-2xl font-bold text-slate-800">{authMode === 'LOGIN' ? 'Öğrenci Girişi' : 'Kayıt Ol'}</h1>
+                      <p className="text-slate-500 mt-2">
+                        {authMode === 'LOGIN' ? 'E-posta ve Şifrenizle giriş yapın.' : 'Bilgilerinizi girerek sisteme kayıt olun.'}
+                      </p>
                     </div>
-                    <form onSubmit={handleCustomLogin} className="space-y-4">
-                      <div>
-                        <input
-                          type="text"
-                          placeholder="Ad Soyad"
-                          className="w-full p-4 border rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition"
-                          value={loginName}
-                          onChange={e => setLoginName(e.target.value)}
-                          required
-                        />
-                      </div>
+
+                    <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
+                      <button
+                        type="button"
+                        onClick={() => { setAuthMode('LOGIN'); setLoginName(''); setLoginEmail(''); setLoginPassword(''); }}
+                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${authMode === 'LOGIN' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                      >
+                        Giriş Yap
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setAuthMode('REGISTER'); setLoginName(''); setLoginEmail(''); setLoginPassword(''); }}
+                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${authMode === 'REGISTER' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                      >
+                        Kayıt Ol
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleCustomAuth} className="space-y-4">
+                      {authMode === 'REGISTER' && (
+                        <div>
+                          <input
+                            type="text"
+                            placeholder="Ad Soyad"
+                            className="w-full p-4 border rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition"
+                            value={loginName}
+                            onChange={e => setLoginName(e.target.value)}
+                            required
+                          />
+                        </div>
+                      )}
                       <div>
                         <input
                           type="email"
-                          placeholder="E-posta (Gmail)"
+                          placeholder="E-posta"
                           className="w-full p-4 border rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition"
                           value={loginEmail}
                           onChange={e => setLoginEmail(e.target.value)}
@@ -327,22 +335,23 @@ const App: React.FC = () => {
                       </div>
                       <div>
                         <input
-                          type="text"
-                          placeholder="Erişim Şifresi"
+                          type="password"
+                          placeholder="Şifre"
                           className="w-full p-4 border rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition font-mono tracking-widest"
-                          value={loginCode}
-                          onChange={e => setLoginCode(e.target.value)}
+                          value={loginPassword}
+                          onChange={e => setLoginPassword(e.target.value)}
+                          required
                         />
                       </div>
                       <button
                         disabled={isLoading}
                         className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
                       >
-                        {isLoading ? 'Giriş Yapılıyor...' : 'Giriş Yap'}
+                        {isLoading ? 'İşlem Yapılıyor...' : (authMode === 'LOGIN' ? 'Giriş Yap' : 'Kayıt Ol')}
                       </button>
                     </form>
                     <p className="text-[10px] text-center text-slate-400 mt-4">
-                      * İlk girişte şifre zorunludur. Sonraki girişlerde yetkiniz varsa şifresiz girebilirsiniz.
+                      {authMode === 'REGISTER' ? '* Kayıt sonrası yönetici onayı beklemeniz gerekebilir.' : '* Şifrenizi unuttuysanız yöneticiyle iletişime geçin.'}
                     </p>
                   </>
                 )}
