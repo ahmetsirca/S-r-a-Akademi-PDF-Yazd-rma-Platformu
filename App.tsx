@@ -41,6 +41,11 @@ const App: React.FC = () => {
   const [activeBook, setActiveBook] = useState<PDFBook | null>(null);
   const [activeKey, setActiveKey] = useState<AccessKey | null>(null);
 
+  // Scroll to top on view or profile change
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view, userProfile]);
+
   // Initial Fetch & Auth Check
   useEffect(() => {
     fetchInitialData();
