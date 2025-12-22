@@ -5,25 +5,58 @@ export const AuthService = {
     /**
      * REGISTER: Create a new user with password
      */
-    async register(fullName: string, email: string, password: string): Promise<UserProfile> {
+    async register(fullName: string, email: string, password: string, code?: string): Promise<UserProfile> {
         // 1. Check if email exists
         const { data: existing } = await supabase.from('profiles').select('id').eq('email', email).single();
         if (existing) {
             throw new Error("Bu e-posta adresi zaten kayıtlı.");
         }
 
-        // 2. Insert new user
-        // Note: In production, passwords should be hashed (e.g., bcrypt). 
-        // For this prototype, we are storing as-is or you should apply simple hashing if no backend.
+        // 2. Validate Code (If provided)
+        let unlockedFolders: string[] = [];
+        if (code) {
+            const { data: folderKeys } = await supabase.from('folder_keys').select('*').eq('key_code', code);
+            const folderKey = folderKeys && folderKeys.length > 0 ? folderKeys[0] : null;
+
+            if (folderKey) {
+                if (folderKey.expires_at && new Date(folderKey.expires_at) < new Date()) {
+                    throw new Error("Girdiğiniz kodun süresi dolmuş.");
+                }
+                unlockedFolders = folderKey.folder_ids || [];
+            } else {
+                // For legacy keys or invalid code, we might want to throw error or just ignore?
+                // User requested "Access Password" which implies validity check.
+                throw new Error("Geçersiz Erişim Şifresi.");
+            }
+        }
+
+        // 3. Insert new user
         const { data: newUser, error } = await supabase.from('profiles').insert({
             full_name: fullName,
             email: email,
-            password: password, // Storing plain text for this environment as requested
+            password: password,
             is_online: true,
             last_seen: new Date().toISOString()
         }).select().single();
 
         if (error) throw error;
+
+        // 4. Assign Permissions (If code was valid)
+        if (unlockedFolders.length > 0) {
+            await supabase.from('user_permissions').insert({
+                user_id: newUser.id,
+                folder_ids: unlockedFolders,
+                can_print: false, // Default to false unless key specifies print? 
+                // The folder_keys table has allow_print. Let's use it.
+                // We need to re-fetch key to get allow_print or store it above
+            });
+            // Re-fetch key details for printing
+            const { data: folderKeys } = await supabase.from('folder_keys').select('allow_print').eq('key_code', code).single();
+            if (folderKeys?.allow_print) {
+                await supabase.from('user_permissions').update({ can_print: true }).eq('user_id', newUser.id);
+            }
+        }
+
         return {
             id: newUser.id,
             email: newUser.email,

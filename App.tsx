@@ -25,7 +25,8 @@ const App: React.FC = () => {
   const [adminInput, setAdminInput] = useState('');
   const [loginName, setLoginName] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState(''); // NEW: Password
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginCode, setLoginCode] = useState(''); // Restore Code Input
 
   // Folder System State
   const [folders, setFolders] = useState<import('./types').Folder[]>([]);
@@ -77,7 +78,7 @@ const App: React.FC = () => {
 
       if (authMode === 'REGISTER') {
         if (!loginName || !loginEmail || !loginPassword) { throw new Error("Ad, E-posta ve Şifre zorunludur."); }
-        const profile = await AuthService.register(loginName, loginEmail, loginPassword);
+        const profile = await AuthService.register(loginName, loginEmail, loginPassword, loginCode); // Pass Code
         alert("Kayıt Başarılı! Şimdi giriş yapabilirsiniz.");
         setAuthMode('LOGIN');
         setLoginPassword('');
@@ -296,14 +297,18 @@ const App: React.FC = () => {
                     <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
                       <button
                         type="button"
-                        onClick={() => { setAuthMode('LOGIN'); setLoginName(''); setLoginEmail(''); setLoginPassword(''); }}
+                      <button
+                        type="button"
+                        onClick={() => { setAuthMode('LOGIN'); setLoginName(''); setLoginEmail(''); setLoginPassword(''); setLoginCode(''); }}
                         className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${authMode === 'LOGIN' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                       >
                         Giriş Yap
                       </button>
                       <button
                         type="button"
-                        onClick={() => { setAuthMode('REGISTER'); setLoginName(''); setLoginEmail(''); setLoginPassword(''); }}
+                      <button
+                        type="button"
+                        onClick={() => { setAuthMode('REGISTER'); setLoginName(''); setLoginEmail(''); setLoginPassword(''); setLoginCode(''); }}
                         className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${authMode === 'REGISTER' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                       >
                         Kayıt Ol
@@ -343,6 +348,18 @@ const App: React.FC = () => {
                           required
                         />
                       </div>
+
+                      {authMode === 'REGISTER' && (
+                        <div>
+                          <input
+                            type="text"
+                            placeholder="Erişim / Kampanya Şifresi (Varsa)"
+                            className="w-full p-4 border rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition font-mono tracking-widest"
+                            value={loginCode}
+                            onChange={e => setLoginCode(e.target.value)}
+                          />
+                        </div>
+                      )}
                       <button
                         disabled={isLoading}
                         className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
