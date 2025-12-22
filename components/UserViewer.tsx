@@ -398,6 +398,18 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     return () => { window.removeEventListener('blur', onBlur); window.removeEventListener('focus', onFocus); };
   }, []);
 
+  // Block Right Click and Ctrl+P
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        alert('Yazdırma işlemi sadece buton üzerinden yapılabilir.');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Calculate generic page width/height for placeholders
   const getPageWidth = () => containerWidth > 0 ? Math.min(containerWidth - 32, 1000) : 800;
   // Apply zoom to width? No, width prop handles it usually, but let's be consistent.
@@ -408,7 +420,10 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   const estimatedHeight = renderedWidth * 1.414;
 
   return (
-    <div className={`fixed inset-0 bg-slate-900 flex flex-col z-50 select-none ${!isFocused ? 'blur-xl' : ''}`}>
+    <div
+      className={`fixed inset-0 bg-slate-900 flex flex-col z-50 select-none ${!isFocused ? 'blur-xl' : ''}`}
+      onContextMenu={(e) => e.preventDefault()}
+    >
 
       {/* Sidebar Toolbar */}
       <div className="absolute top-1/2 left-4 md:flex flex-col gap-2 bg-slate-800 border border-slate-600 rounded-xl p-2 hidden transform -translate-y-1/2 shadow-2xl z-[60]">
