@@ -427,12 +427,13 @@ const App: React.FC = () => {
                   <h2 className="text-2xl font-bold text-slate-800">Derslerim</h2>
                 </div>
 
-                {folders.length === 0 ? (
+                {folders.length === 0 && !unlockedFolderIds.some((id: string) => id.startsWith('BOOK:')) ? (
                   <div className="bg-slate-50 rounded-2xl p-8 text-center border border-slate-200 border-dashed">
                     <p className="text-slate-400">Henüz ders klasörü eklenmemiş.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    {/* Render Real Folders */}
                     {folders.filter(f => !f.parentId).map(f => (
                       <div
                         key={f.id}
@@ -453,6 +454,58 @@ const App: React.FC = () => {
                         </div>
                       </div>
                     ))}
+
+                    {/* Render Virtual 'Legacy Library' Folder if User has unlocked individual books */}
+                    {unlockedFolderIds.some((id: string) => id.startsWith('BOOK:')) && (
+                      <div
+                        onClick={async () => {
+                          // 1. Identify unlocked book IDs
+                          const bookIds = unlockedFolderIds.filter((id: string) => id.startsWith('BOOK:')).map((id: string) => id.replace('BOOK:', ''));
+                          // 2. Fetch ALL books (Legacy) - In a real app we might want to batch fetch, but here getBooks is okay.
+                          const allBooks = await StorageService.getBooks();
+                          const unlockedBooks = allBooks.filter(b => bookIds.includes(b.id));
+
+                          // 3. Create a Virtual Folder Object
+                          const virtualFolder: import('./types').Folder = {
+                            id: 'VIRTUAL_LIBRARY',
+                            parentId: null,
+                            title: 'Bireysel Kütüphane',
+                            isActive: true,
+                            createdAt: Date.now()
+                          };
+
+                          // 4. Navigate
+                          setNavigationStack(prev => [...prev, virtualFolder]);
+
+                          // 5. Convert Books to FolderContent
+                          const virtualContent: import('./types').FolderContent[] = unlockedBooks.map(b => ({
+                            id: b.id,
+                            folderId: 'VIRTUAL_LIBRARY',
+                            type: 'pdf', // Legacy books are PDFs
+                            title: b.name,
+                            url: b.sourceUrl || '',
+                            createdAt: b.createdAt
+                          }));
+
+                          setFolderContent(virtualContent);
+                          setView('USER_FOLDER_VIEW');
+                        }}
+                        className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-indigo-300 transition group"
+                      >
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition">
+                              <i className="fas fa-book text-xl"></i>
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-lg text-slate-800">Bireysel Kütüphane</h3>
+                              <p className="text-xs text-slate-500">Erişim kodlu tekil kitaplarınız</p>
+                            </div>
+                          </div>
+                          <i className="fas fa-chevron-right text-slate-300 "></i>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

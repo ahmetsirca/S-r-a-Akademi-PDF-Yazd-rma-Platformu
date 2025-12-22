@@ -72,32 +72,49 @@ export const AuthService = {
      */
     async redeemCode(userId: string, code: string): Promise<{ success: boolean, message: string }> {
         const cleanCode = code.trim();
-        // 1. Validate Code
-        // Use textSearch or explicit trimmed match if needed, but eq should work with trimmed string
+
+        // 1. Validate Feature Key (New System)
         const { data: folderKeys } = await supabase.from('folder_keys').select('*').eq('key_code', cleanCode);
         const folderKey = folderKeys && folderKeys.length > 0 ? folderKeys[0] : null;
 
-        if (!folderKey) {
-            throw new Error("Geçersiz Erişim Şifresi.");
+        let itemsToUnlock: string[] = [];
+        let enablePrint = false;
+
+        if (folderKey) {
+            if (folderKey.expires_at && new Date(folderKey.expires_at) < new Date()) {
+                throw new Error("Girdiğiniz kodun süresi dolmuş.");
+            }
+            itemsToUnlock = folderKey.folder_ids || [];
+            enablePrint = folderKey.allow_print;
+        } else {
+            // 2. Validate Legacy Key (Old System)
+            // Check 'access_keys' table
+            const { data: legacyKeys } = await supabase.from('access_keys').select('*').eq('key_code', cleanCode);
+            const legacyKey = legacyKeys && legacyKeys.length > 0 ? legacyKeys[0] : null;
+
+            if (legacyKey) {
+                // Found a legacy key! 
+                // Map it to a special "BOOK:" format to store in permissions
+                itemsToUnlock = [`BOOK:${legacyKey.book_id}`];
+                // Legacy keys usually have a print limit (e.g. 2). If limit > 0, we allow print.
+                enablePrint = (legacyKey.print_limit || 0) > 0;
+            } else {
+                throw new Error("Geçersiz Erişim Şifresi.");
+            }
         }
 
-        if (folderKey.expires_at && new Date(folderKey.expires_at) < new Date()) {
-            throw new Error("Girdiğiniz kodun süresi dolmuş.");
-        }
-
-        // 2. Grant Permissions
-        const newFolders = folderKey.folder_ids || [];
-        if (newFolders.length > 0) {
+        // 3. Grant Permissions
+        if (itemsToUnlock.length > 0) {
             // Check existing permissions
             const { data: existingPerms } = await supabase.from('user_permissions').select('*').eq('user_id', userId).single();
-            let finalFolders = newFolders;
-            let canPrint = folderKey.allow_print;
+            let finalFolders = itemsToUnlock;
+            let canPrint = enablePrint;
 
             if (existingPerms) {
-                // Merge folders
-                finalFolders = [...new Set([...(existingPerms.folder_ids || []), ...newFolders])];
+                // Merge folders (and book IDs)
+                finalFolders = [...new Set([...(existingPerms.folder_ids || []), ...itemsToUnlock])];
                 // Merge print (if either allows, allow it)
-                canPrint = existingPerms.can_print || folderKey.allow_print;
+                canPrint = existingPerms.can_print || enablePrint;
 
                 await supabase.from('user_permissions').update({
                     folder_ids: finalFolders,
@@ -112,7 +129,7 @@ export const AuthService = {
             }
             return { success: true, message: "Erişim şifresi başarıyla tanımlandı." };
         } else {
-            return { success: false, message: "Bu şifreye tanımlı klasör bulunamadı." };
+            return { success: false, message: "Bu şifreye tanımlı içerik bulunamadı." };
         }
     },
 
