@@ -386,7 +386,7 @@ const App: React.FC = () => {
                           try {
                             if (userProfile) {
                               // User Logged In -> Redeem Code directly
-                              await AuthService.redeemCode(userProfile.id, loginCode);
+                              await AuthService.redeemCode(userProfile.id, loginCode.trim());
                               alert("Teşekkürler! Erişim şifreniz hesabınıza tanımlandı. İlgili klasörlere artık erişebilirsiniz.");
                               setLoginCode('');
 
