@@ -199,11 +199,33 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
     if (scrollTimeout.current) return;
 
     if (e.deltaY > 50) {
+      // Wheel down - check if at bottom? No, wheel is usually explicit page turn request in this context
+      // But let's respect native scroll if content overflows. 
+      // Actually per requirement: "Scroll to bottom then go next" is better for mobile touch, 
+      // but wheel on desktop might want explicit paging.
+      // Keeping existing wheel logic for desktop but adding scroll listener for mobile/touch.
       changePage(1);
       blockScroll();
     } else if (e.deltaY < -50) {
       changePage(-1);
       blockScroll();
+    }
+  };
+
+  // Scroll to Advance (Mobile/Touch)
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (scrollTimeout.current || drawMode) return;
+
+    const target = e.currentTarget;
+    const isAtBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 50; // 50px threshold
+
+    if (isAtBottom && pageNumber < (numPages || 1)) {
+      // User reached bottom, advance page
+      console.log("Reached bottom, advancing page...");
+      changePage(1);
+      blockScroll();
+      // Reset scroll to top of new page
+      target.scrollTop = 0;
     }
   };
 
@@ -249,112 +271,115 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
 
       const performSecureLogout = () => {
         // Clean up frame
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe);
-        }
+        // Since handlePrint is async, better to use state.
+        const performSecureLogout = () => {
+          // Clean up frame
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
 
-        setIsPrinting(false);
-        // INSTEAD of immediate exit, show modal
-        setShowSuccessModal(true);
-      };
-
-      // Wait for iframe to load the PDF
-      iframe.onload = () => {
-        if (!iframe.contentWindow) {
           setIsPrinting(false);
+          // INSTEAD of immediate exit, show modal
+          setShowSuccessModal(true);
+        };
+
+        // Wait for iframe to load the PDF
+        iframe.onload = () => {
+          if (!iframe.contentWindow) {
+            setIsPrinting(false);
+            return;
+          }
+
+          const printWindow = iframe.contentWindow;
+          printWindow.focus();
+
+          const mediaQueryList = printWindow.matchMedia('print');
+          mediaQueryList.addListener((mql) => {
+            if (!mql.matches) {
+              performSecureLogout();
+            }
+          });
+
+          printWindow.onafterprint = performSecureLogout;
+
+          try {
+            printWindow.print();
+          } catch (e) {
+            console.error("Print call failed", e);
+            performSecureLogout();
+          }
+        };
+
+        // Update limits
+        await StorageService.updateKeyCount(currentKey.id);
+        const updatedKeys = await StorageService.getKeys();
+        const match = updatedKeys.find(k => k.id === currentKey.id);
+        if (match) setCurrentKey(match);
+
+      } catch (e) {
+        console.error("Yazdırma hatası:", e);
+        alert("Yazdırma işlemi başlatılamadı.");
+        setIsPrinting(false);
+      }
+    };
+
+    // Block keyboard shortcuts
+    useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        // Prevent Save
+        if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+          e.preventDefault();
           return;
         }
 
-        const printWindow = iframe.contentWindow;
-        printWindow.focus();
+        // Prevent Print (System)
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+          e.preventDefault();
+          handlePrint(); // Redirect to our secure print
+          return;
+        }
 
-        const mediaQueryList = printWindow.matchMedia('print');
-        mediaQueryList.addListener((mql) => {
-          if (!mql.matches) {
-            performSecureLogout();
-          }
-        });
+        // Prevent Copy
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+          e.preventDefault();
+          return;
+        }
 
-        printWindow.onafterprint = performSecureLogout;
-
-        try {
-          printWindow.print();
-        } catch (e) {
-          console.error("Print call failed", e);
-          performSecureLogout();
+        // Prevent Inspect / DevTools
+        if (
+          e.key === 'F12' ||
+          ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) ||
+          ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U'))
+        ) {
+          e.preventDefault();
+          return;
         }
       };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [currentKey]);
 
-      // Update limits
-      await StorageService.updateKeyCount(currentKey.id);
-      const updatedKeys = await StorageService.getKeys();
-      const match = updatedKeys.find(k => k.id === currentKey.id);
-      if (match) setCurrentKey(match);
+    // Focus Protection
+    const [isFocused, setIsFocused] = useState(true);
 
-    } catch (e) {
-      console.error("Yazdırma hatası:", e);
-      alert("Yazdırma işlemi başlatılamadı.");
-      setIsPrinting(false);
-    }
-  };
+    useEffect(() => {
+      const onBlur = () => setIsFocused(false);
+      const onFocus = () => setIsFocused(true);
+      window.addEventListener('blur', onBlur);
+      window.addEventListener('focus', onFocus);
+      return () => {
+        window.removeEventListener('blur', onBlur);
+        window.removeEventListener('focus', onFocus);
+      };
+    }, []);
 
-  // Block keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Prevent Save
-      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
-        e.preventDefault();
-        return;
-      }
-
-      // Prevent Print (System)
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
-        e.preventDefault();
-        handlePrint(); // Redirect to our secure print
-        return;
-      }
-
-      // Prevent Copy
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
-        e.preventDefault();
-        return;
-      }
-
-      // Prevent Inspect / DevTools
-      if (
-        e.key === 'F12' ||
-        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) ||
-        ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U'))
-      ) {
-        e.preventDefault();
-        return;
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentKey]);
-
-  // Focus Protection
-  const [isFocused, setIsFocused] = useState(true);
-
-  useEffect(() => {
-    const onBlur = () => setIsFocused(false);
-    const onFocus = () => setIsFocused(true);
-    window.addEventListener('blur', onBlur);
-    window.addEventListener('focus', onFocus);
-    return () => {
-      window.removeEventListener('blur', onBlur);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, []);
-
-  return (
-    <div
-      className={`fixed inset-0 bg-slate-900 flex flex-col z-50 select-none transition-all duration-300 ${!isFocused ? 'blur-xl opacity-50 grayscale' : ''}`}
-      onContextMenu={(e) => { e.preventDefault(); return false; }}
-      onDragStart={(e) => e.preventDefault()}
-    >
-      <style>{`
+    return (
+      <div
+        className={`fixed inset-0 bg-slate-900 flex flex-col z-50 select-none transition-all duration-300 ${!isFocused ? 'blur-xl opacity-50 grayscale' : ''}`}
+        onContextMenu={(e) => { e.preventDefault(); return false; }}
+        onDragStart={(e) => e.preventDefault()}
+      >
+        <style>{`
         @media print {
           body > *:not(iframe) {
             display: none !important;
@@ -370,148 +395,196 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
           }
         }
       `}</style>
-      {/* Header */}
-      <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shadow-lg shrink-0">
-        <div className="flex items-center gap-4">
-          <button onClick={onExit} className="text-white hover:bg-slate-700 p-2 rounded-lg transition">
-            <i className="fas fa-arrow-left"></i>
-          </button>
-          <div className="flex flex-col">
-            <h2 className="text-white font-semibold truncate max-w-[200px] md:max-w-md">{book.name}</h2>
-            {numPages && (
-              <span className="text-xs text-slate-400">
-                Sayfa {pageNumber} / {numPages}
-              </span>
+        {/* Header */}
+        <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shadow-lg shrink-0">
+          <div className="flex items-center gap-4">
+            <button onClick={onExit} className="text-white hover:bg-slate-700 p-2 rounded-lg transition">
+              <i className="fas fa-arrow-left"></i>
+            </button>
+            <div className="flex flex-col">
+              <h2 className="text-white font-semibold truncate max-w-[200px] md:max-w-md">{book.name}</h2>
+              {numPages && (
+                <span className="text-xs text-slate-400">
+                  Sayfa {pageNumber} / {numPages}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* Zoom Controls */}
+            <div className="flex bg-slate-700 rounded-lg mr-4 items-center overflow-hidden">
+              <button onClick={() => handleZoom(-0.2)} className="p-2 text-white hover:bg-slate-600 px-3 border-r border-slate-600"><i className="fas fa-search-minus"></i></button>
+              <span className="px-2 text-center text-white text-xs min-w-[3rem]">{Math.round(scale * 100)}%</span>
+              <button onClick={() => handleZoom(0.2)} className="p-2 text-white hover:bg-slate-600 px-3 border-l border-slate-600"><i className="fas fa-search-plus"></i></button>
+            </div>
+
+            {/* Pagination Controls - Hidden on Mobile */}
+            <div className="hidden md:flex bg-slate-700 rounded-lg overflow-hidden mr-4">
+              <button
+                disabled={pageNumber <= 1}
+                onClick={() => changePage(-1)}
+                className="p-2 text-white hover:bg-slate-600 disabled:opacity-30 px-3"
+              >
+                <i className="fas fa-chevron-left"></i>
+              </button>
+              <form onSubmit={(e) => { e.preventDefault(); }} className="flex items-center">
+                <input
+                  type="number"
+                  min={1}
+                  max={numPages || 1}
+                  value={pageNumber}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    if (val >= 1 && val <= (numPages || 1)) setPageNumber(val);
+                  }}
+                  className="w-16 px-2 py-2 text-center bg-slate-800 text-white font-mono border-l border-r border-slate-600 outline-none focus:bg-slate-700 appearance-none"
+                />
+              </form>
+              <button
+                disabled={pageNumber >= (numPages || 1)}
+                onClick={() => changePage(1)}
+                className="p-2 text-white hover:bg-slate-600 disabled:opacity-30 px-3"
+              >
+                <i className="fas fa-chevron-right"></i>
+              </button>
+            </div>
+
+            {/* Draw Controls - Hidden on Mobile (Moved to Bottom) */}
+            {drawMode && (
+              <div className="hidden md:flex bg-slate-700 rounded-lg mr-2 overflow-hidden">
+                <button onClick={undoAnnotation} className="p-2 text-white hover:bg-slate-600 px-3 border-r border-slate-600" title="Geri Al"><i className="fas fa-undo"></i></button>
+                <button onClick={clearPage} className="p-2 text-red-400 hover:bg-slate-600 px-3" title="Temizle"><i className="fas fa-trash"></i></button>
+              </div>
             )}
+
+            {/* Draw Toggle */}
+            {/* Draw Toggle (Desktop only - Mobile has floating bar) */}
+            <button
+              onClick={() => setDrawMode(!drawMode)}
+              className={`hidden md:block p-2 rounded-lg mr-4 transition ${drawMode ? 'bg-yellow-500 text-slate-900 border-2 border-yellow-600' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+              title="Çizim Modu"
+            >
+              <i className="fas fa-pen"></i>
+            </button>
+
+            <div className="hidden md:flex flex-col items-end">
+              <span className="text-slate-400 text-xs">Kota</span>
+              <span className={`text-sm font-bold ${currentKey.printCount >= currentKey.printLimit ? 'text-red-400' : 'text-green-400'}`}>
+                {currentKey.printCount}/{currentKey.printLimit}
+              </span>
+            </div>
+            <button
+              onClick={handlePrint}
+              disabled={currentKey.printCount >= currentKey.printLimit || isPrinting}
+              className={`flex items-center gap-2 px-6 py-2 rounded-full font-bold transition ${currentKey.printCount >= currentKey.printLimit || isPrinting
+                ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+            >
+              <i className={`fas ${isPrinting ? 'fa-spinner fa-spin' : 'fa-print'}`}></i>
+              {isPrinting ? 'Yazdırılıyor...' : (currentKey.printCount >= currentKey.printLimit ? 'Doldu' : 'Yazdır')}
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          {/* Zoom Controls */}
-          <div className="flex bg-slate-700 rounded-lg mr-4 items-center overflow-hidden">
-            <button onClick={() => handleZoom(-0.2)} className="p-2 text-white hover:bg-slate-600 px-3 border-r border-slate-600"><i className="fas fa-search-minus"></i></button>
-            <span className="px-2 text-center text-white text-xs min-w-[3rem]">{Math.round(scale * 100)}%</span>
-            <button onClick={() => handleZoom(0.2)} className="p-2 text-white hover:bg-slate-600 px-3 border-l border-slate-600"><i className="fas fa-search-plus"></i></button>
-          </div>
-
-          {/* Pagination Controls */}
-          <div className="flex bg-slate-700 rounded-lg overflow-hidden mr-4">
-            <button
-              disabled={pageNumber <= 1}
-              onClick={() => changePage(-1)}
-              className="p-2 text-white hover:bg-slate-600 disabled:opacity-30 px-3"
-            >
-              <i className="fas fa-chevron-left"></i>
-            </button>
-            <form onSubmit={(e) => { e.preventDefault(); }} className="flex items-center">
-              <input
-                type="number"
-                min={1}
-                max={numPages || 1}
-                value={pageNumber}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value);
-                  if (val >= 1 && val <= (numPages || 1)) setPageNumber(val);
-                }}
-                className="w-16 px-2 py-2 text-center bg-slate-800 text-white font-mono border-l border-r border-slate-600 outline-none focus:bg-slate-700 appearance-none"
-              />
-            </form>
-            <button
-              disabled={pageNumber >= (numPages || 1)}
-              onClick={() => changePage(1)}
-              className="p-2 text-white hover:bg-slate-600 disabled:opacity-30 px-3"
-            >
-              <i className="fas fa-chevron-right"></i>
-            </button>
-          </div>
-
-          {/* Draw Controls */}
-          {drawMode && (
-            <div className="flex bg-slate-700 rounded-lg mr-2 overflow-hidden">
-              <button onClick={undoAnnotation} className="p-2 text-white hover:bg-slate-600 px-3 border-r border-slate-600" title="Geri Al"><i className="fas fa-undo"></i></button>
-              <button onClick={clearPage} className="p-2 text-red-400 hover:bg-slate-600 px-3" title="Temizle"><i className="fas fa-trash"></i></button>
+        {/* Content */}
+        <div
+          className="flex-1 relative bg-slate-500 overflow-auto flex justify-center p-4 outline-none pb-24" // Added pb-24 for mobile nav space
+          onWheel={handleWheel}
+          onScroll={handleScroll} // Add scroll handler
+        >
+          {!isFocused && (
+            <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/50 text-white font-bold text-2xl">
+              Görüntülemek için pencereye odaklanın
             </div>
           )}
+          {pdfUrl ? (
+            <>
+              <Document
+                file={pdfUrl}
+                onLoadSuccess={onDocumentLoadSuccess}
+                loading={<div className="text-white mt-10">Kitap Yükleniyor...</div>}
+                error={<div className="text-red-300 mt-10">Kitap yüklenemedi.</div>}
+                className="shadow-2xl"
+              >
+                <Page
+                  pageNumber={pageNumber}
+                  scale={scale}
+                  renderAnnotationLayer={false}
+                  renderTextLayer={true}
+                  className="shadow-2xl relative"
+                >
+                  <canvas
+                    ref={canvasRef}
+                    className={`absolute inset-0 z-50 ${drawMode ? 'cursor-crosshair' : 'pointer-events-none'}`}
+                    onMouseDown={startDrawing}
+                    onMouseMove={draw}
+                    onMouseUp={stopDrawing}
+                    onMouseLeave={stopDrawing}
+                    onTouchStart={startDrawing}
+                    onTouchMove={draw}
+                    onTouchEnd={stopDrawing}
+                    style={{ touchAction: drawMode ? 'none' : 'auto' }}
+                  />
+                </Page>
+              </Document>
 
-          {/* Draw Toggle */}
-          {/* Draw Toggle (Desktop only - Mobile has floating bar) */}
+
+            </>
+          ) : (
+            <div className="flex items-center justify-center h-full text-slate-200">
+              Yükleniyor...
+            </div>
+          )}
+        </div>
+
+      </div>
+
+      {/* Mobile Bottom Navigation & Toolbar Container */ }
+    {/* Logic: 
+          - If DrawMode is ON: Show Sketch Tools
+          - If DrawMode is OFF: Show Page Navigation (Prev/Next/Input)
+          - Toggle Button is always visible
+      */}
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 z-[60] w-full px-4 pointer-events-none">
+
+      {/* Navigation Bar (Visible only when NOT drawing) */}
+      {!drawMode && (
+        <div className="pointer-events-auto bg-slate-800/90 backdrop-blur-md border border-slate-600 p-2 rounded-2xl shadow-xl flex items-center gap-4 animate-slide-up">
           <button
-            onClick={() => setDrawMode(!drawMode)}
-            className={`hidden md:block p-2 rounded-lg mr-4 transition ${drawMode ? 'bg-yellow-500 text-slate-900 border-2 border-yellow-600' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
-            title="Çizim Modu"
+            disabled={pageNumber <= 1}
+            onClick={() => changePage(-1)}
+            className="p-3 text-white hover:bg-slate-700 rounded-xl disabled:opacity-30 transition hover:scale-110 active:scale-95"
           >
-            <i className="fas fa-pen"></i>
+            <i className="fas fa-chevron-left text-xl"></i>
           </button>
-
-          <div className="hidden md:flex flex-col items-end">
-            <span className="text-slate-400 text-xs">Kota</span>
-            <span className={`text-sm font-bold ${currentKey.printCount >= currentKey.printLimit ? 'text-red-400' : 'text-green-400'}`}>
-              {currentKey.printCount}/{currentKey.printLimit}
-            </span>
+          <div className="flex flex-col items-center">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Sayfa</span>
+            <input
+              type="number"
+              min={1}
+              max={numPages || 1}
+              value={pageNumber}
+              onChange={(e) => {
+                const val = parseInt(e.target.value);
+                if (val >= 1 && val <= (numPages || 1)) setPageNumber(val);
+              }}
+              className="w-12 bg-transparent text-center text-white font-bold text-lg outline-none"
+            />
           </div>
           <button
-            onClick={handlePrint}
-            disabled={currentKey.printCount >= currentKey.printLimit || isPrinting}
-            className={`flex items-center gap-2 px-6 py-2 rounded-full font-bold transition ${currentKey.printCount >= currentKey.printLimit || isPrinting
-              ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
-              }`}
+            disabled={pageNumber >= (numPages || 1)}
+            onClick={() => changePage(1)}
+            className="p-3 text-white hover:bg-slate-700 rounded-xl disabled:opacity-30 transition hover:scale-110 active:scale-95"
           >
-            <i className={`fas ${isPrinting ? 'fa-spinner fa-spin' : 'fa-print'}`}></i>
-            {isPrinting ? 'Yazdırılıyor...' : (currentKey.printCount >= currentKey.printLimit ? 'Doldu' : 'Yazdır')}
+            <i className="fas fa-chevron-right text-xl"></i>
           </button>
         </div>
-      </div>
+      )}
 
-      {/* Content */}
-      <div className="flex-1 relative bg-slate-500 overflow-auto flex justify-center p-4 outline-none" onWheel={handleWheel}>
-        {!isFocused && (
-          <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/50 text-white font-bold text-2xl">
-            Görüntülemek için pencereye odaklanın
-          </div>
-        )}
-        {pdfUrl ? (
-          <>
-            <Document
-              file={pdfUrl}
-              onLoadSuccess={onDocumentLoadSuccess}
-              loading={<div className="text-white mt-10">Kitap Yükleniyor...</div>}
-              error={<div className="text-red-300 mt-10">Kitap yüklenemedi.</div>}
-              className="shadow-2xl"
-            >
-              <Page
-                pageNumber={pageNumber}
-                scale={scale}
-                renderAnnotationLayer={false}
-                renderTextLayer={true}
-                className="shadow-2xl relative"
-              >
-                <canvas
-                  ref={canvasRef}
-                  className={`absolute inset-0 z-50 ${drawMode ? 'cursor-crosshair' : 'pointer-events-none'}`}
-                  onMouseDown={startDrawing}
-                  onMouseMove={draw}
-                  onMouseUp={stopDrawing}
-                  onMouseLeave={stopDrawing}
-                  onTouchStart={startDrawing}
-                  onTouchMove={draw}
-                  onTouchEnd={stopDrawing}
-                  style={{ touchAction: drawMode ? 'none' : 'auto' }}
-                />
-              </Page>
-            </Document>
-
-
-          </>
-        ) : (
-          <div className="flex items-center justify-center h-full text-slate-200">
-            Yükleniyor...
-          </div>
-        )}
-      </div>
-
-      {/* Mobile Floating Toolbar for Drawing */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800/90 backdrop-blur-md border border-slate-600 p-2 rounded-full shadow-2xl flex items-center gap-2 z-[60] transition-transform duration-300">
+      {/* Floating Tools Row */}
+      <div className="pointer-events-auto bg-slate-800/90 backdrop-blur-md border border-slate-600 p-2 rounded-full shadow-2xl flex items-center gap-2 transition-transform duration-300">
         <button
           onClick={() => setDrawMode(!drawMode)}
           className={`w-12 h-12 rounded-full flex items-center justify-center text-xl transition ${drawMode ? 'bg-yellow-500 text-slate-900 shadow-[0_0_15px_rgba(234,179,8,0.5)] scale-110' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
@@ -540,33 +613,34 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
           </>
         )}
       </div>
+    </div>
 
-      {/* Success Modal */}
-      {
-        showSuccessModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
-            <div className="bg-white rounded-2xl p-8 max-w-lg text-center shadow-2xl animate-bounce-in">
-              <div className="bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-                <i className="fas fa-check text-4xl text-green-600"></i>
-              </div>
-              <h2 className="text-2xl font-bold text-slate-800 mb-4">İşlem Başarılı</h2>
-              <p className="text-slate-600 text-lg mb-6 leading-relaxed">
-                Tebrikler, yazdırma işlemi gerçekleşmiştir.
-                <br />
-                <span className="font-bold text-red-500 block mt-2">
-                  UYARI: PDF kitapların çoğaltılması yasal yükümlülükler doğurmaktadır.
-                </span>
-              </p>
-              <button
-                onClick={onExit}
-                className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold text-lg hover:bg-slate-800 transition"
-              >
-                Tamam, Oturumu Kapat
-              </button>
+    {/* Success Modal */ }
+    {
+      showSuccessModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-lg text-center shadow-2xl animate-bounce-in">
+            <div className="bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <i className="fas fa-check text-4xl text-green-600"></i>
             </div>
+            <h2 className="text-2xl font-bold text-slate-800 mb-4">İşlem Başarılı</h2>
+            <p className="text-slate-600 text-lg mb-6 leading-relaxed">
+              Tebrikler, yazdırma işlemi gerçekleşmiştir.
+              <br />
+              <span className="font-bold text-red-500 block mt-2">
+                UYARI: PDF kitapların çoğaltılması yasal yükümlülükler doğurmaktadır.
+              </span>
+            </p>
+            <button
+              onClick={onExit}
+              className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold text-lg hover:bg-slate-800 transition"
+            >
+              Tamam, Oturumu Kapat
+            </button>
           </div>
-        )
-      }
+        </div>
+      )
+    }
     </div >
   );
 };
