@@ -14,16 +14,25 @@ import { AuthService } from '../services/auth';
 
 
 
+// Types for Annotation
+interface AnnotationPath {
+  points: { x: number, y: number }[];
+  type: 'PEN' | 'HIGHLIGHTER';
+  color: string;
+  width: number;
+}
+
 interface SinglePDFPageProps {
   pageNumber: number;
   scale: number;
   width: number;
-  drawMode: boolean;
-  annotations: { x: number, y: number }[][];
-  onAnnotationAdd: (page: number, path: { x: number, y: number }[]) => void;
+  toolMode: 'CURSOR' | 'PEN' | 'HIGHLIGHTER' | 'ERASER';
+  penColor: string;
+  annotations: AnnotationPath[];
+  onAnnotationAdd: (page: number, path: AnnotationPath) => void;
 }
 
-const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width, drawMode, annotations, onAnnotationAdd }) => {
+const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width, toolMode, penColor, annotations, onAnnotationAdd }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
   const currentPath = useRef<{ x: number, y: number }[]>([]);
@@ -33,7 +42,6 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    // Handle both mouse and touch
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     return {
@@ -43,16 +51,14 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
   };
 
   const startDrawing = (e: any) => {
-    if (!drawMode) return;
+    if (toolMode === 'CURSOR') return;
     isDrawing.current = true;
     const p = getPoint(e);
     currentPath.current = [p];
-    // console.log('Start drawing on page', pageNumber);
   };
 
   const draw = (e: any) => {
-    if (!isDrawing.current || !drawMode) return;
-    // Prevent scrolling on mobile while drawing
+    if (!isDrawing.current || toolMode === 'CURSOR') return;
     if (e.cancelable) e.preventDefault();
 
     const p = getPoint(e);
@@ -62,7 +68,22 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
     if (canvas) {
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(255, 0, 0, 0.6)';
+        // Live Rendering Preview
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        if (toolMode === 'HIGHLIGHTER') {
+          ctx.globalAlpha = 0.3; // Transparent
+          ctx.lineWidth = 20;
+          ctx.strokeStyle = penColor === '#000000' ? '#FFFF00' : penColor; // Default to yellow if black is selected/default
+          ctx.globalCompositeOperation = 'multiply';
+        } else {
+          ctx.globalAlpha = 1.0;
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = penColor;
+          ctx.globalCompositeOperation = 'source-over';
+        }
+
         ctx.beginPath();
         const prev = currentPath.current[currentPath.current.length - 2] || p;
         ctx.moveTo(prev.x, prev.y);
@@ -77,7 +98,12 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
     isDrawing.current = false;
 
     if (currentPath.current.length > 0) {
-      onAnnotationAdd(pageNumber, currentPath.current);
+      onAnnotationAdd(pageNumber, {
+        points: currentPath.current,
+        type: toolMode === 'HIGHLIGHTER' ? 'HIGHLIGHTER' : 'PEN',
+        color: toolMode === 'HIGHLIGHTER' && penColor === '#000000' ? '#FFFF00' : penColor,
+        width: toolMode === 'HIGHLIGHTER' ? 20 : 3
+      });
     }
     currentPath.current = [];
   };
@@ -87,11 +113,6 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Resize handled by CSS/Parent mostly, but we match resolution
-    // Note: React-PDF canvas is separate. This is our overlay.
-    // We rely on the parent container (the Page div) for size. 
-    // Ideally we sync explicitly but "absolute inset-0" does the job visually.
-    // For resolution:
     if (canvas.parentElement) {
       canvas.width = canvas.parentElement.clientWidth;
       canvas.height = canvas.parentElement.clientHeight;
@@ -101,30 +122,44 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(255, 0, 0, 0.6)';
+    annotations.forEach(ann => {
+      if (ann.points.length < 2) return;
 
-    annotations.forEach(path => {
-      if (path.length < 2) return;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      if (ann.type === 'HIGHLIGHTER') {
+        ctx.globalAlpha = 0.3;
+        ctx.lineWidth = ann.width || 20;
+        ctx.strokeStyle = ann.color;
+        ctx.globalCompositeOperation = 'multiply';
+      } else {
+        ctx.globalAlpha = 1.0;
+        ctx.lineWidth = ann.width || 3;
+        ctx.strokeStyle = ann.color;
+        ctx.globalCompositeOperation = 'source-over';
+      }
+
       ctx.beginPath();
-      ctx.moveTo(path[0].x, path[0].y);
-      for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+      ctx.moveTo(ann.points[0].x, ann.points[0].y);
+      for (let i = 1; i < ann.points.length; i++) ctx.lineTo(ann.points[i].x, ann.points[i].y);
       ctx.stroke();
     });
-  }, [annotations, scale, width]); // Re-draw if size changes
+  }, [annotations, scale, width]);
 
   return (
-    <div id={`page-${pageNumber}`} className="mb-4 relative shadow-lg">
+    <div id={`page-${pageNumber}`} className="mb-4 relative shadow-lg group">
       <Page
         pageNumber={pageNumber}
         scale={scale}
         width={width}
         renderAnnotationLayer={false}
-        renderTextLayer={true}
+        renderTextLayer={true} // Essential for selection
         loading={<div className="h-96 bg-white animate-pulse" />}
       >
         <canvas
           ref={canvasRef}
-          className={`absolute inset-0 z-50 ${drawMode ? 'cursor-crosshair touch-none' : 'pointer-events-none'}`}
+          className={`absolute inset-0 z-50 ${toolMode === 'CURSOR' ? 'pointer-events-none' : 'cursor-crosshair touch-none'}`}
           onMouseDown={startDrawing}
           onMouseMove={draw}
           onMouseUp={stopDrawing}
@@ -152,10 +187,14 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   const [userId, setUserId] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
-  const [currentPage, setCurrentPage] = useState<number>(1); // For indicator
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const [scale, setScale] = useState(1.0);
-  const [drawMode, setDrawMode] = useState(false);
-  const [annotations, setAnnotations] = useState<Record<number, { x: number, y: number }[][]>>({});
+
+  // Pro Toolbar State
+  const [toolMode, setToolMode] = useState<'CURSOR' | 'PEN' | 'HIGHLIGHTER' | 'ERASER'>('CURSOR');
+  const [penColor, setPenColor] = useState('#EF4444'); // Red default
+
+  const [annotations, setAnnotations] = useState<Record<number, AnnotationPath[]>>({});
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(window.innerWidth);
@@ -163,14 +202,12 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   // Persistence (Last Page)
   useEffect(() => {
     const saved = localStorage.getItem(`sirca_lp_${book.id}`);
-    // Wait for pdf to load effectively, but we can just scroll on load
-    if (saved) {
-      // We'll handle scroll in onDocumentLoadSuccess
-    }
+    if (saved) { /* ... handled in onLoadSuccess ... */ }
   }, [book.id]);
 
   // Init Logic
   useEffect(() => {
+    // Check if Google User
     const sess = AuthService.loadSession();
     if (sess) {
       setUserId(sess.id);
@@ -178,6 +215,10 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       DBService.logActivity(sess.id, 'VIEW_FILE', book.id, `Opened ${book.name}`);
     }
   }, [book.id]);
+
+  useEffect(() => {
+    if (currentPage > 0) localStorage.setItem(`sirca_lp_${book.id}`, currentPage.toString());
+  }, [currentPage, book.id]);
 
   // Persistence (Annotations)
   useEffect(() => {
@@ -189,7 +230,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     if (Object.keys(annotations).length > 0) localStorage.setItem(`sirca_notes_${book.id}`, JSON.stringify(annotations));
   }, [annotations, book.id]);
 
-  const addAnnotation = (page: number, path: { x: number, y: number }[]) => {
+  const addAnnotation = (page: number, path: AnnotationPath) => {
     setAnnotations(prev => ({
       ...prev,
       [page]: [...(prev[page] || []), path]
@@ -197,8 +238,6 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   };
 
   const undoAnnotation = () => {
-    // Undo on CURRENT visible page? Or global?
-    // Let's rely on currentPage 
     setAnnotations(prev => {
       const paths = prev[currentPage] || [];
       if (paths.length === 0) return prev;
@@ -244,7 +283,6 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
-    // Restore Last Page
     const saved = localStorage.getItem(`sirca_lp_${book.id}`);
     if (saved) {
       const p = parseInt(saved);
@@ -257,42 +295,43 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     }
   };
 
-  // Intersection Observer for Current Page
+  // Intersection Observer
   useEffect(() => {
     if (!numPages) return;
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
-          const id = entry.target.id; // page-N
+          const id = entry.target.id;
           const num = parseInt(id.replace('page-', ''));
           setCurrentPage(num);
-          // Save persistence
-          localStorage.setItem(`sirca_lp_${book.id}`, num.toString());
         }
       });
-    }, { threshold: 0.5 }); // 50% visible
+    }, { threshold: 0.5 });
 
-    // Observe all pages
     for (let i = 1; i <= numPages; i++) {
       const el = document.getElementById(`page-${i}`);
       if (el) observer.observe(el);
     }
-
     return () => observer.disconnect();
-  }, [numPages, pdfUrl]); // Re-run when pages render
-
+  }, [numPages, pdfUrl]);
 
   const handleZoom = (delta: number) => {
     setScale(prev => Math.min(Math.max(0.5, prev + delta), 3.0));
   };
 
+  const handleWheel = (e: React.WheelEvent) => {
+    // Zoom on Ctrl + Wheel
+    if (e.ctrlKey) {
+      if (e.deltaY < 0) handleZoom(0.1);
+      else handleZoom(-0.1);
+      return;
+    }
+  };
 
   const [isPrinting, setIsPrinting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // ... (Print Logic remains similar, abbreviated for brevity in replacement)
   const handlePrint = async () => {
-    // Permission Logic
     let canPrint = false;
     if (userPermission) { canPrint = userPermission.canPrint; }
     else if (currentKey) { canPrint = (currentKey.printLimit > currentKey.printCount); }
@@ -300,7 +339,6 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     if (!canPrint) { alert("Yazdırma izniniz yok."); return; }
 
     setIsPrinting(true);
-    // ... (Iframe logic same as before)
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
     iframe.src = pdfUrl!;
@@ -312,18 +350,12 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         document.body.removeChild(iframe);
         setIsPrinting(false);
         setShowSuccessModal(true);
-        // Update counts
-        if (!userPermission && currentKey) {
-          StorageService.updateKeyCount(currentKey.id);
-        }
+        if (!userPermission && currentKey) StorageService.updateKeyCount(currentKey.id);
       }, 1000);
     };
   };
-  // NOTE: Simple print specific for this refactor to save lines, 
-  // relying on browser default behavior for simple print which is usually fine for these users.
-  // Ideally we keep the robust logic, let's try to preserve it or simplify it slightly.
 
-  // Focus Protection
+  // Focus Protection disabled for testing ease? No, keep it.
   const [isFocused, setIsFocused] = useState(true);
   useEffect(() => {
     const onBlur = () => setIsFocused(false);
@@ -335,11 +367,51 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
   return (
     <div className={`fixed inset-0 bg-slate-900 flex flex-col z-50 select-none ${!isFocused ? 'blur-xl' : ''}`}>
-      {/* Header */}
-      <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shadow-lg shrink-0 z-50">
+
+      {/* Sidebar Toolbar (Desktop: Left, Mobile: Bottom/Hidden) */}
+      <div className="absolute top-1/2 left-4 md:flex flex-col gap-2 bg-slate-800 border border-slate-600 rounded-xl p-2 hidden transform -translate-y-1/2 shadow-2xl z-[60]">
+        <button onClick={() => setToolMode('CURSOR')}
+          className={`p-3 rounded-lg transition ${toolMode === 'CURSOR' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Seçim / İmleç">
+          <i className="fas fa-mouse-pointer"></i>
+        </button>
+
+        <div className="w-full h-px bg-slate-700 my-1"></div>
+
+        <button onClick={() => setToolMode('PEN')}
+          className={`p-3 rounded-lg transition ${toolMode === 'PEN' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Kalem">
+          <i className="fas fa-pen"></i>
+        </button>
+
+        <button onClick={() => setToolMode('HIGHLIGHTER')}
+          className={`p-3 rounded-lg transition ${toolMode === 'HIGHLIGHTER' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Vurgulayıcı">
+          <i className="fas fa-highlighter"></i>
+        </button>
+
+        <button onClick={undoAnnotation}
+          className="p-3 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition" title="Geri Al">
+          <i className="fas fa-undo"></i>
+        </button>
+        <button onClick={clearPage}
+          className="p-3 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-900/30 transition" title="Sayfayı Temizle">
+          <i className="fas fa-trash"></i>
+        </button>
+
+        <div className="w-full h-px bg-slate-700 my-1"></div>
+
+        {/* Colors */}
+        <div className="flex flex-col gap-2 items-center p-1">
+          <button onClick={() => setPenColor('#EF4444')} className={`w-6 h-6 rounded-full bg-red-500 border-2 ${penColor === '#EF4444' ? 'border-white' : 'border-transparent'}`} />
+          <button onClick={() => setPenColor('#3B82F6')} className={`w-6 h-6 rounded-full bg-blue-500 border-2 ${penColor === '#3B82F6' ? 'border-white' : 'border-transparent'}`} />
+          <button onClick={() => setPenColor('#000000')} className={`w-6 h-6 rounded-full bg-black border-2 border-slate-500 ${penColor === '#000000' ? 'scale-110' : ''}`} />
+          <button onClick={() => setPenColor('#10B981')} className={`w-6 h-6 rounded-full bg-green-500 border-2 ${penColor === '#10B981' ? 'border-white' : 'border-transparent'}`} />
+        </div>
+      </div>
+
+      {/* Top Header */}
+      <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shadow-lg shrink-0 z-[60]">
         <div className="flex items-center gap-4">
           <button onClick={onExit} className="text-white hover:bg-slate-700 p-2 rounded"><i className="fas fa-arrow-left"></i></button>
-          <h2 className="text-white font-bold truncate max-w-[200px]">{book.name}</h2>
+          <h2 className="text-white font-bold truncate max-w-[150px] md:max-w-md">{book.name}</h2>
         </div>
         <div className="flex items-center gap-2">
           <div className="bg-slate-700 rounded flex items-center mr-2">
@@ -347,17 +419,22 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
             <span className="text-white text-sm w-12 text-center">{Math.round(scale * 100)}%</span>
             <button onClick={() => handleZoom(0.2)} className="p-2 text-white"><i className="fas fa-plus"></i></button>
           </div>
-          <button onClick={() => setDrawMode(!drawMode)} className={`p-2 rounded ${drawMode ? 'bg-yellow-500 text-black' : 'text-white'}`}>
-            <i className="fas fa-pen"></i>
-          </button>
-          <button onClick={handlePrint} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+
+          {/* Mobile Tool Toggle */}
+          <div className="md:hidden flex bg-slate-700 rounded-lg p-1">
+            <button onClick={() => setToolMode('CURSOR')} className={`p-2 rounded ${toolMode === 'CURSOR' ? 'bg-slate-500 text-white' : 'text-slate-400'}`}><i className="fas fa-mouse-pointer"></i></button>
+            <button onClick={() => setToolMode('PEN')} className={`p-2 rounded ${toolMode === 'PEN' ? 'bg-slate-500 text-white' : 'text-slate-400'}`}><i className="fas fa-pen"></i></button>
+            <button onClick={() => setToolMode('HIGHLIGHTER')} className={`p-2 rounded ${toolMode === 'HIGHLIGHTER' ? 'bg-slate-500 text-white' : 'text-slate-400'}`}><i className="fas fa-highlighter"></i></button>
+          </div>
+
+          <button onClick={handlePrint} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 ml-2">
             <i className="fas fa-print"></i>
           </button>
         </div>
       </div>
 
       {/* Scrollable Content */}
-      <div ref={containerRef} className="flex-1 overflow-auto bg-slate-500 relative flex flex-col items-center pt-8 pb-24">
+      <div ref={containerRef} className="flex-1 overflow-auto bg-slate-500 relative flex flex-col items-center pt-8 pb-24" onWheel={handleWheel}>
         {!isFocused && <div className="fixed inset-0 z-[100] bg-black/50 text-white flex items-center justify-center text-2xl font-bold">Odaklanın</div>}
 
         {pdfUrl ? (
@@ -368,7 +445,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
                 pageNumber={index + 1}
                 scale={scale}
                 width={containerWidth > 0 ? Math.min(containerWidth - 32, 1000) : 800}
-                drawMode={drawMode}
+                toolMode={toolMode}
+                penColor={penColor}
                 annotations={annotations[index + 1] || []}
                 onAnnotationAdd={addAnnotation}
               />
@@ -382,11 +460,14 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         {currentPage} / {numPages || '-'}
       </div>
 
-      {/* Draw Tools (Bottom) */}
-      {drawMode && (
-        <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 flex gap-4 bg-slate-800 p-2 rounded-xl shadow-xl z-50">
-          <button onClick={undoAnnotation} className="p-3 bg-slate-700 rounded-full text-white"><i className="fas fa-undo"></i></button>
-          <button onClick={clearPage} className="p-3 bg-red-500/20 text-red-400 rounded-full"><i className="fas fa-trash"></i></button>
+      {/* Mobile Floating Colors (Only when drawing) */}
+      {toolMode !== 'CURSOR' && (
+        <div className="md:hidden fixed bottom-20 left-1/2 transform -translate-x-1/2 flex gap-3 bg-slate-800 p-2 rounded-xl shadow-xl z-50">
+          <button onClick={() => setPenColor('#EF4444')} className={`w-8 h-8 rounded-full bg-red-500 border-2 ${penColor === '#EF4444' ? 'border-white' : 'border-transparent'}`} />
+          <button onClick={() => setPenColor('#3B82F6')} className={`w-8 h-8 rounded-full bg-blue-500 border-2 ${penColor === '#3B82F6' ? 'border-white' : 'border-transparent'}`} />
+          <button onClick={() => setPenColor('#000000')} className={`w-8 h-8 rounded-full bg-black border-2 border-slate-500 ${penColor === '#000000' ? 'border-white' : 'border-transparent'}`} />
+          <div className="w-px h-8 bg-slate-600 mx-1"></div>
+          <button onClick={undoAnnotation} className="text-slate-300 p-1"><i className="fas fa-undo"></i></button>
         </div>
       )}
 
