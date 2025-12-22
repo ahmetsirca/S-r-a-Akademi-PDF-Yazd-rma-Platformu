@@ -212,22 +212,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
     }
   };
 
-  // Scroll to Advance (Mobile/Touch)
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    if (scrollTimeout.current || drawMode) return;
-
-    const target = e.currentTarget;
-    const isAtBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 50; // 50px threshold
-
-    if (isAtBottom && pageNumber < (numPages || 1)) {
-      // User reached bottom, advance page
-      console.log("Reached bottom, advancing page...");
-      changePage(1);
-      blockScroll();
-      // Reset scroll to top of new page
-      target.scrollTop = 0;
-    }
-  };
+  // Scroll to Advance (Mobile/Touch) - DISABLED per user request
+  // const handleScroll = (e: React.UIEvent<HTMLDivElement>) => { ... }
 
   const blockScroll = () => {
     scrollTimeout.current = setTimeout(() => {
@@ -373,6 +359,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
   return (
     <div
       className={`fixed inset-0 bg-slate-900 flex flex-col z-50 select-none transition-all duration-300 ${!isFocused ? 'blur-xl opacity-50 grayscale' : ''}`}
+      style={{ overscrollBehavior: 'none' }} // Prevent pull-to-refresh / swipe-to-back
       onContextMenu={(e) => { e.preventDefault(); return false; }}
       onDragStart={(e) => e.preventDefault()}
     >
@@ -488,8 +475,9 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
       {/* Content */}
       <div
         className="flex-1 relative bg-slate-500 overflow-auto flex justify-center p-4 outline-none pb-24" // Added pb-24 for mobile nav space
+        style={{ overscrollBehavior: 'none' }}
         onWheel={handleWheel}
-        onScroll={handleScroll} // Add scroll handler
+      // onScroll={handleScroll} // Disabled per request
       >
         {!isFocused && (
           <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/50 text-white font-bold text-2xl">
