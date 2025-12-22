@@ -4,7 +4,7 @@ import { StorageService } from '../services/storage';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
-import '../index.css'; // Ensure tailwind is available
+// import '../index.css'; // Removed: Tailwind is loaded via CDN
 
 // Set worker source - using static file for robustness
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
