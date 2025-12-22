@@ -150,19 +150,6 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
   }, [annotations, scale, width]);
 
   const handlePageLoadSuccess = (page: any) => {
-    // page.originalHeight / page.originalWidth gives aspect ratio, but we want rendered height
-    // The Page component renders at the given 'width'.
-    const viewport = page.getViewport({ scale: scale });
-    // We can approximate or just presume the component size.
-    // Better: Use the ref of the container wrapper?
-    // Actually 'page' object has height.
-    // But we are using width-based scaling.
-    // Let's trust the rendered DOM element height if we can, or calculate it.
-    // Viewport height is accurate.
-    // scale prop in Page component combines with width. 
-    // If width is provided, Page ignores scale for sizing and updates it to fit width.
-    // Let's assume onPageLoad gives us the page proxy.
-    // Calculate rendered height: originalHeight * (renderedWidth / originalWidth)
     const renderedHeight = page.originalHeight * (width / page.originalWidth);
     onPageLoad(pageNumber, renderedHeight);
   };
@@ -171,27 +158,25 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
     <div className="relative shadow-lg group w-full" style={{ minHeight: width * 1.4 }}>
       <Page
         pageNumber={pageNumber}
-        width={width} // 'scale' is ignored when width is set usually, need to check
-        scale={scale} // Actually react-pdf uses scale * width if both? No. width overrides.
-        // If we want zoom, we should adjust 'width' passed to this component OR use scale if no width.
-        // We are passing width, so efficient zoom means changing 'width'.
+        width={width}
+        // scale={scale} // Removed scale prop here to let width drive the sizing completely, as we manage scale via width prop in UserViewer
         renderAnnotationLayer={false}
         renderTextLayer={true}
         onLoadSuccess={handlePageLoadSuccess}
         loading={<div className="bg-white animate-pulse w-full" style={{ height: width * 1.41 }} />}
-      >
-        <canvas
-          ref={canvasRef}
-          className={`absolute inset-0 z-[100] ${toolMode === 'CURSOR' ? 'pointer-events-none' : 'cursor-crosshair touch-none'}`}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-          onTouchStart={startDrawing}
-          onTouchMove={draw}
-          onTouchEnd={stopDrawing}
-        />
-      </Page>
+      />
+      {/* Canvas moved outside Page component to ensure it sits on top of TextLayer */}
+      <canvas
+        ref={canvasRef}
+        className={`absolute inset-0 z-[100] ${toolMode === 'CURSOR' ? 'pointer-events-none' : 'cursor-crosshair touch-none'}`}
+        onMouseDown={startDrawing}
+        onMouseMove={draw}
+        onMouseUp={stopDrawing}
+        onMouseLeave={stopDrawing}
+        onTouchStart={startDrawing}
+        onTouchMove={draw}
+        onTouchEnd={stopDrawing}
+      />
     </div>
   );
 };
@@ -425,13 +410,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* CSS to ensure Drawing Canvas is always interactive and Text Layer doesn't block it */}
-      {toolMode !== 'CURSOR' && (
-        <style>{`
-            .react-pdf__Page__textContent, .react-pdf__Page__annotations {
-              pointer-events: none !important;
-            }
-         `}</style>
-      )}
+
 
       {/* Sidebar Toolbar */}
       <div className="absolute top-1/2 left-4 md:flex flex-col gap-2 bg-slate-800 border border-slate-600 rounded-xl p-2 hidden transform -translate-y-1/2 shadow-2xl z-[60]">
