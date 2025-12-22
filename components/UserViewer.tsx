@@ -9,14 +9,23 @@ import 'react-pdf/dist/esm/Page/TextLayer.css';
 // Set worker source - using static file for robustness
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
+import { DBService } from '../services/db';
+import { AuthService } from '../services/auth';
+
+import { DBService } from '../services/db';
+import { AuthService } from '../services/auth';
+
 interface UserViewerProps {
   book: PDFBook;
-  accessKey: AccessKey;
+  accessKey?: AccessKey; // Made optional for Google Auth users
+  isDeviceVerified?: boolean;
   onExit: () => void;
 }
 
-const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
-  const [currentKey, setCurrentKey] = useState(accessKey);
+const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerified = true, onExit }) => {
+  const [currentKey, setCurrentKey] = useState<AccessKey | undefined>(accessKey);
+  const [userPermission, setUserPermission] = useState<import('../types').UserPermission | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState<number>(1);
@@ -37,6 +46,19 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
       const p = parseInt(saved);
       if (p > 0) setPageNumber(p);
     }
+  }, [book.id]);
+
+  // Init Logic
+  useEffect(() => {
+    // Check if Google User
+    AuthService.getSession().then(async (sess) => {
+      if (sess) {
+        setUserId(sess.user.id);
+        const perm = await DBService.getUserPermissions(sess.user.id);
+        setUserPermission(perm);
+        DBService.logActivity(sess.user.id, 'VIEW_FILE', book.id, `Opened ${book.name}`);
+      }
+    });
   }, [book.id]);
 
   useEffect(() => {
@@ -282,12 +304,30 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const handlePrint = async () => {
-    if (currentKey.printCount >= currentKey.printLimit) {
-      alert("Yazdırma limitine (2 kez) ulaştınız.");
+    // Permission Check
+    let canPrint = false;
+
+    if (userPermission) {
+      // Google User: Check DB permission
+      canPrint = userPermission.canPrint;
+      if (!canPrint) {
+        alert("Yönetici tarafından yazdırma izniniz (Google Hesabı) bulunmuyor.");
+        return;
+      }
+    } else if (currentKey) {
+      // Legacy Key User
+      if (currentKey.printCount >= currentKey.printLimit) {
+        alert("Yazdırma limitine (2 kez) ulaştınız.");
+        return;
+      }
+      canPrint = true;
+    } else {
+      alert("Erişim yetkisi doğrulanamadı.");
       return;
     }
 
     setIsPrinting(true);
+    if (userId) DBService.logActivity(userId, 'PRINT_FILE', book.id, `Started printing ${book.name}`);
 
     try {
       // Create a hidden iframe
@@ -350,11 +390,16 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
         }
       };
 
-      // Update limits
-      await StorageService.updateKeyCount(currentKey.id);
-      const updatedKeys = await StorageService.getKeys();
-      const match = updatedKeys.find(k => k.id === currentKey.id);
-      if (match) setCurrentKey(match);
+      // Update limits based on user type
+      if (userPermission) {
+        // Log completion for Google User
+        if (userId) DBService.logActivity(userId, 'PRINT_FILE', book.id, `Printed ${book.name} successfully`);
+      } else if (currentKey) {
+        await StorageService.updateKeyCount(currentKey.id);
+        const updatedKeys = await StorageService.getKeys();
+        const match = updatedKeys.find(k => k.id === currentKey.id);
+        if (match) setCurrentKey(match);
+      }
 
     } catch (e) {
       console.error("Yazdırma hatası:", e);
@@ -511,20 +556,23 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
 
           <div className="hidden md:flex flex-col items-end">
             <span className="text-slate-400 text-xs">Kota</span>
-            <span className={`text-sm font-bold ${currentKey.printCount >= currentKey.printLimit ? 'text-red-400' : 'text-green-400'}`}>
-              {currentKey.printCount}/{currentKey.printLimit}
+            <span className={`text-sm font-bold ${(currentKey && currentKey.printCount >= currentKey.printLimit) ? 'text-red-400' : 'text-green-400'}`}>
+              {currentKey ? `${currentKey.printCount}/${currentKey.printLimit}` : (userPermission?.canPrint ? 'Sınırsız' : 'Yok')}
             </span>
           </div>
           <button
             onClick={handlePrint}
-            disabled={currentKey.printCount >= currentKey.printLimit || isPrinting}
-            className={`flex items-center gap-2 px-6 py-2 rounded-full font-bold transition ${currentKey.printCount >= currentKey.printLimit || isPrinting
+            disabled={isPrinting || (currentKey && currentKey.printCount >= currentKey.printLimit) || (userPermission && !userPermission.canPrint)}
+            className={`flex items-center gap-2 px-6 py-2 rounded-full font-bold transition ${(currentKey && currentKey.printCount >= currentKey.printLimit) || (userPermission && !userPermission.canPrint) || isPrinting
               ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
               : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
           >
             <i className={`fas ${isPrinting ? 'fa-spinner fa-spin' : 'fa-print'}`}></i>
-            {isPrinting ? 'Yazdırılıyor...' : (currentKey.printCount >= currentKey.printLimit ? 'Doldu' : 'Yazdır')}
+            {isPrinting ? 'Yazdırılıyor...' : (
+              userPermission ? (userPermission.canPrint ? 'Yazdır' : 'İzinsiz') :
+                (currentKey && currentKey.printCount >= currentKey.printLimit ? 'Doldu' : 'Yazdır')
+            )}
           </button>
         </div>
       </div>

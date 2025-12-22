@@ -8,8 +8,8 @@ interface AdminDashboardProps {
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  // Tabs: 'KEYS' = Legacy Key Management, 'COURSES' = New Folder/Course Management
-  const [adminTab, setAdminTab] = useState<'KEYS' | 'COURSES'>('KEYS');
+  // Tabs: 'KEYS' = Legacy Key Management, 'COURSES' = New Folder/Course Management, 'USERS' = User Management, 'LOGS' = Activity Logs
+  const [adminTab, setAdminTab] = useState<'KEYS' | 'COURSES' | 'USERS' | 'LOGS'>('KEYS');
 
   // -- EXISTING STATE (Keys) --
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -48,6 +48,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [keyExpiresAt, setKeyExpiresAt] = useState('');
   const [allowPrint, setAllowPrint] = useState(false);
 
+  // -- USER MANAGEMENT STATE --
+  const [users, setUsers] = useState<import('../types').UserProfile[]>([]);
+  const [activityLogs, setActivityLogs] = useState<import('../types').ActivityLog[]>([]);
+  const [selectedUser, setSelectedUser] = useState<import('../types').UserProfile | null>(null);
+  const [permModalOpen, setPermModalOpen] = useState(false);
+
+  // Permission Inputs
+  const [permFolderIds, setPermFolderIds] = useState<string[]>([]);
+  const [permCanPrint, setPermCanPrint] = useState(false);
+  const [permExpiresAt, setPermExpiresAt] = useState('');
+
+  // Device Management State
+  const [deviceModalOpen, setDeviceModalOpen] = useState(false);
+  const [userDevices, setUserDevices] = useState<any[]>([]);
+
+  // Auto-refresh for online status
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (adminTab === 'USERS') refreshUsers();
+    }, 10000); // 10s polling for online status
+    return () => clearInterval(interval);
+  }, [adminTab]);
+
   useEffect(() => {
     refreshData();
   }, []);
@@ -72,6 +95,77 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
     setIsLoading(false);
   };
+
+  const refreshUsers = async () => {
+    setUsers(await import('../services/db').then(m => m.DBService.getAllUsers()));
+  }
+
+  const handleOpenPermModal = async (user: import('../types').UserProfile) => {
+    setSelectedUser(user);
+    // Fetch existing perms
+    const perms = await import('../services/db').then(m => m.DBService.getUserPermissions(user.id));
+
+    if (perms) {
+      setPermFolderIds(perms.folderIds);
+      setPermCanPrint(perms.canPrint);
+      setPermExpiresAt(perms.expiresAt ? perms.expiresAt.slice(0, 16) : ''); // Format for datetime-local
+    } else {
+      setPermFolderIds([]);
+      setPermCanPrint(false);
+      setPermExpiresAt('');
+    }
+    setPermModalOpen(true);
+  };
+
+  const handleSavePermissions = async () => {
+    if (!selectedUser) return;
+    try {
+      await import('../services/db').then(m => m.DBService.updateUserPermission(
+        selectedUser.id,
+        permFolderIds,
+        permCanPrint,
+        permExpiresAt ? new Date(permExpiresAt).toISOString() : null
+      ));
+      setPermModalOpen(false);
+      alert("İzinler güncellendi.");
+    } catch (e) { console.error(e); alert("Hata oluştu."); }
+  };
+
+  const handleOpenDeviceModal = async (user: import('../types').UserProfile) => {
+    setSelectedUser(user);
+    const devices = await import('../services/db').then(m => m.DBService.getUserDevices(user.id));
+    setUserDevices(devices);
+    setDeviceModalOpen(true);
+  };
+
+  const handleToggleDevice = async (deviceId: string, currentStatus: boolean) => {
+    await import('../services/db').then(m => m.DBService.toggleDeviceApproval(deviceId, !currentStatus));
+    if (selectedUser) {
+      const devices = await import('../services/db').then(m => m.DBService.getUserDevices(selectedUser.id));
+      setUserDevices(devices);
+    }
+  };
+
+  const handleDeleteDevice = async (deviceId: string) => {
+    if (!confirm("Cihaz silinsin mi?")) return;
+    await import('../services/db').then(m => m.DBService.deleteDevice(deviceId));
+    if (selectedUser) {
+      const devices = await import('../services/db').then(m => m.DBService.getUserDevices(selectedUser.id));
+      setUserDevices(devices);
+    }
+  };
+
+  const loadLogs = async () => {
+    setIsLoading(true);
+    setActivityLogs(await import('../services/db').then(m => m.DBService.getActivityLogs()));
+    setIsLoading(false);
+  };
+
+  // Re-fetch when switching tabs
+  useEffect(() => {
+    if (adminTab === 'USERS') refreshUsers();
+    if (adminTab === 'LOGS') loadLogs();
+  }, [adminTab]);
 
   // --- LEGACY COLLECTIIONS HANDLERS ---
   const handleCreateCollection = async (e: React.FormEvent) => {
@@ -237,290 +331,480 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8 min-h-screen bg-slate-50">
-      {/* Header */}
       <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-800">Yönetici Paneli</h1>
-          <p className="text-blue-600 font-medium tracking-wide">SIRÇA AKADEMİ YÖNETİM MERKEZİ</p>
-        </div>
-        <div className="flex gap-3">
-          <div className="flex bg-slate-100 p-1 rounded-lg">
-            <button
-              onClick={() => setAdminTab('KEYS')}
-              className={`px-4 py-2 text-sm font-bold rounded-md transition ${adminTab === 'KEYS' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Erişim Anahtarları (Eski)
-            </button>
-            <button
-              onClick={() => setAdminTab('COURSES')}
-              className={`px-4 py-2 text-sm font-bold rounded-md transition ${adminTab === 'COURSES' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              DERSLERİM (Yeni)
-            </button>
-          </div>
-          <button onClick={onLogout} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition shadow-red-200 shadow-lg">
-            <i className="fas fa-sign-out-alt mr-2"></i> Çıkış
-          </button>
-        </div>
+        <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+          <i className="fas fa-shield-alt text-blue-600 mr-3"></i>
+          Yönetici Paneli
+        </h1>
+        <button onClick={onLogout} className="bg-red-50 text-red-600 hover:bg-red-100 px-4 py-2 rounded-xl text-sm font-bold transition flex items-center">
+          <i className="fas fa-sign-out-alt mr-2"></i> Çıkış
+        </button>
       </div>
 
-      {adminTab === 'KEYS' ? (
-        // --- LEGACY KEYS VIEW ---
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h2 className="text-xl font-semibold mb-4 text-slate-700">Dosya/Klasör (Eski)</h2>
-            <form onSubmit={handleCreateCollection} className="space-y-4">
-              <input type="text" placeholder="Klasör Adı" className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={newColName} onChange={(e) => setNewColName(e.target.value)} />
-              <button className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition">Klasör Ekle</button>
-            </form>
-            <div className="mt-6">
-              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2">Mevcut Klasörler</h3>
-              <ul className="space-y-2">{collections.map(c => <li key={c.id} className="p-2 bg-slate-50 rounded flex justify-between"><span><i className="fas fa-folder text-blue-500 mr-2"></i>{c.name}</span></li>)}</ul>
-            </div>
+      {/* Sub-Navigation */}
+      < div className="flex justify-center mb-8" >
+        <div className="bg-white p-1 rounded-xl shadow-sm border border-slate-200 inline-flex">
+          <button onClick={() => setAdminTab('KEYS')} className={`px-6 py-2 rounded-lg text-sm font-bold transition ${adminTab === 'KEYS' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <i className="fas fa-key mr-2"></i>Eski Anahtarlar
+          </button>
+          <button onClick={() => setAdminTab('COURSES')} className={`px-6 py-2 rounded-lg text-sm font-bold transition ${adminTab === 'COURSES' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <i className="fas fa-folder-tree mr-2"></i>Dersler
+          </button>
+          <button onClick={() => setAdminTab('USERS')} className={`px-6 py-2 rounded-lg text-sm font-bold transition ${adminTab === 'USERS' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <i className="fas fa-users mr-2"></i>Kullanıcılar
+          </button>
+          <button onClick={() => setAdminTab('LOGS')} className={`px-6 py-2 rounded-lg text-sm font-bold transition ${adminTab === 'LOGS' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <i className="fas fa-history mr-2"></i>Loglar
+          </button>
+        </div>
+      </div >
+
+      {adminTab === 'USERS' && (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-bold text-slate-800">Kullanıcı Yönetimi</h2>
+            <button onClick={refreshUsers} className="text-blue-600 hover:text-blue-800"><i className="fas fa-sync-alt"></i></button>
           </div>
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 text-slate-500 border-b"><th className="p-4">Kullanıcı</th><th className="p-4">Durum</th><th className="p-4">Son Görülme</th><th className="p-4 text-right">İşlem</th></tr>
+            </thead>
+            <tbody>
+              {users.map(u => (
+                <tr key={u.id} className="border-b hover:bg-slate-50">
+                  <td className="p-4 flex items-center gap-3">
+                    <img src={u.avatarUrl || `https://ui-avatars.com/api/?name=${u.fullName || u.email}`} className="w-10 h-10 rounded-full" />
+                    <div>
+                      <div className="font-bold text-slate-800">{u.fullName || 'Adsız'}</div>
+                      <div className="text-xs text-slate-500">{u.email}</div>
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    {u.isOnline
+                      ? <span className="inline-flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold"><span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>Aktif</span>
+                      : <span className="text-slate-400 text-xs font-medium">Çevrimdışı</span>
+                    }
+                  </td>
+                  <td className="p-4 text-sm text-slate-600">{u.lastSeen ? new Date(u.lastSeen).toLocaleString() : '-'}</td>
+                  <td className="p-4 text-right flex justify-end gap-2">
+                    <button onClick={() => handleOpenDeviceModal(u)} className="bg-slate-100 text-slate-600 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-sm font-bold transition">
+                      <i className="fas fa-desktop mr-2"></i>Cihazlar
+                    </button>
+                    <button onClick={() => handleOpenPermModal(u)} className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-sm font-bold transition">
+                      <i className="fas fa-lock-open mr-2"></i>İzinler
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
+      {
+        adminTab === 'LOGS' && (
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-slate-700">Tekil İçerik Ekle (Erişim Kodlu)</h2>
-              <div className="flex bg-slate-100 p-1 rounded-lg">
-                <button onClick={() => { setActiveTab('FILE'); setBookFile(null); }} className={`px-4 py-2 text-sm font-bold rounded-md transition ${activeTab === 'FILE' ? 'bg-white text-blue-600 shadow' : 'text-slate-500'}`}>PDF</button>
-                <button onClick={() => { setActiveTab('LINK'); setBookFile(null); }} className={`px-4 py-2 text-sm font-bold rounded-md transition ${activeTab === 'LINK' ? 'bg-white text-blue-600 shadow' : 'text-slate-500'}`}>Link</button>
-              </div>
+              <h2 className="text-xl font-bold text-slate-800">Aktivite Logları</h2>
+              <button onClick={loadLogs} className="text-blue-600 hover:text-blue-800"><i className="fas fa-sync-alt"></i></button>
             </div>
-            <form onSubmit={handleUploadBook} className="space-y-4">
-              <input type="text" placeholder="Başlık" className="w-full border p-2 rounded" value={newBookName} onChange={(e) => setNewBookName(e.target.value)} required />
-              {activeTab === 'LINK' ?
-                <input type="url" placeholder="URL" className="w-full border p-2 rounded" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} required /> :
-                <input type="file" accept="application/pdf" className="w-full border p-2 rounded" onChange={(e) => setBookFile(e.target.files?.[0] || null)} required />
-              }
-              <div className="grid grid-cols-2 gap-4">
-                <input type="text" placeholder="Erişim Şifresi" className="border p-2 rounded" value={newBookPass} onChange={(e) => setNewBookPass(e.target.value)} required />
-                <select className="border p-2 rounded" value={selectedCol} onChange={(e) => setSelectedCol(e.target.value)} required>
-                  <option value="">Klasör Seç</option>
-                  {collections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-              <button disabled={isLoading} className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700">{isLoading ? 'Yükleniyor...' : 'Kaydet'}</button>
-            </form>
-
-            <div className="mt-8 overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead><tr className="bg-slate-50"><th className="p-3">Ad</th><th className="p-3">Kod</th><th className="p-3">Limit</th><th className="p-3">Sil</th></tr></thead>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 border-b"><th className="p-3">Zaman</th><th className="p-3">Kullanıcı</th><th className="p-3">İşlem</th><th className="p-3">Detay</th></tr>
+                </thead>
                 <tbody>
-                  {books.map(b => {
-                    const k = keys.find(k => k.bookId === b.id);
-                    return (
-                      <tr key={b.id} className="border-b">
-                        <td className="p-3">{b.name}</td>
-                        <td className="p-3 font-mono bg-slate-100 rounded">{k?.key}</td>
-                        <td className="p-3">{k?.printCount}/{k?.printLimit}</td>
-                        <td className="p-3"><button onClick={() => handleDeleteBook(b.id)} className="text-red-500"><i className="fas fa-trash"></i></button></td>
-                      </tr>
-                    )
-                  })}
+                  {activityLogs.map(log => (
+                    <tr key={log.id} className="border-b hover:bg-slate-50 font-mono">
+                      <td className="p-3 text-slate-500">{new Date(log.createdAt).toLocaleString()}</td>
+                      <td className="p-3 font-bold text-slate-700">{log.userEmail}</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded textxs font-bold ${log.actionType === 'LOGIN' ? 'bg-green-100 text-green-700' :
+                          log.actionType === 'PRINT_FILE' ? 'bg-red-100 text-red-700' :
+                            log.actionType === 'VIEW_FILE' ? 'bg-blue-100 text-blue-700' :
+                              'bg-slate-100 text-slate-600'
+                          }`}>
+                          {log.actionType}
+                        </span>
+                      </td>
+                      <td className="p-3 text-slate-600 truncatemax-w-xs">{log.details}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           </div>
-        </div>
-      ) : (
-        // --- NEW COURSES VIEW ---
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Sidebar: Folders Tree */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 lg:col-span-1">
-            <h2 className="text-lg font-bold text-slate-700 mb-4">Ders Klasörleri</h2>
+        )
+      }
 
-            {/* Create Folder Form */}
-            <form onSubmit={handleCreateFolder} className="mb-6 border-b pb-4">
-              <label className="text-xs font-bold text-slate-500 block mb-1">Yeni Klasör Oluştur</label>
-              <div className="text-xs text-blue-500 mb-2">
-                {activeFolderId ? `"${folders.find(f => f.id === activeFolderId)?.title}" içine` : 'Ana Dizin'}
-              </div>
-              <div className="flex gap-2">
-                <input type="text" placeholder="Klasör Adı" className="w-full border p-2 rounded text-sm" value={newFolderTitle} onChange={(e) => setNewFolderTitle(e.target.value)} />
-                <button className="bg-blue-600 text-white px-3 rounded hover:bg-blue-700">+</button>
-              </div>
-              {activeFolderId && (
-                <button type="button" onClick={() => setActiveFolderId(null)} className="text-xs text-red-500 mt-2 underline">Ana Dizine Dön</button>
-              )}
-            </form>
-
-            {/* Folder List (Filtered by Parent) */}
-            <ul className="space-y-2">
-              {folders.filter(f => f.parentId === activeFolderId).length === 0 && <p className="text-xs text-slate-400 italic">Bu klasör boş.</p>}
-              {folders.filter(f => f.parentId === activeFolderId).map(f => (
-                <li key={f.id}
-                  onClick={() => handleSelectFolder(f.id)}
-                  className={`p-3 rounded-lg cursor-pointer flex justify-between items-center transition ${activeFolderId === f.id ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'hover:bg-slate-50 text-slate-600'}`}
-                >
-                  <span className="font-medium truncate flex-1"><i className={`fas ${activeFolderId === f.id ? 'fa-folder-open' : 'fa-folder'} mr-2`}></i>{f.title}</span>
-                  <button onClick={(e) => { e.stopPropagation(); handleDeleteFolder(f.id); }} className="text-slate-400 hover:text-red-500 px-2"><i className="fas fa-trash-alt"></i></button>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Main Content: Folder Details & Key Management */}
-          <div className="lg:col-span-3 space-y-8">
-            {activeFolderId ? (
-              <>
-                {/* Folder Header */}
-                <div className="flex items-center gap-2 text-slate-500 text-sm mb-2">
-                  <span onClick={() => setActiveFolderId(null)} className="cursor-pointer hover:underline">Ana Dizin</span>
-                  <i className="fas fa-chevron-right text-xs"></i>
-                  <span className="font-bold text-slate-800">{folders.find(f => f.id === activeFolderId)?.title}</span>
-                </div>
-
-                {/* Add Content Section */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                  <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">İçerik Ekle</h3>
-                  <form onSubmit={handleAddItemToFolder} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                    <div className="md:col-span-3">
-                      <label className="text-xs font-bold text-slate-500">Tür</label>
-                      <select className="w-full border p-2 rounded" value={newItemType} onChange={(e) => setNewItemType(e.target.value as any)}>
-                        <option value="pdf">PDF Dosyası</option>
-                        <option value="link">Web Linki</option>
-                      </select>
-                    </div>
-                    <div className="md:col-span-4">
-                      <label className="text-xs font-bold text-slate-500">İçerik Başlığı</label>
-                      <input type="text" className="w-full border p-2 rounded" value={newItemTitle} onChange={(e) => setNewItemTitle(e.target.value)} placeholder="Örn: Hafta 1 Notları" required />
-                    </div>
-                    <div className="md:col-span-4">
-                      <label className="text-xs font-bold text-slate-500">{newItemType === 'pdf' ? 'Dosya' : 'URL'}</label>
-                      {newItemType === 'pdf' ? (
-                        <input type="file" accept="application/pdf" className="w-full text-sm" onChange={(e) => setNewItemFile(e.target.files?.[0] || null)} />
-                      ) : (
-                        <input type="url" className="w-full border p-2 rounded" value={newItemUrl} onChange={(e) => setNewItemUrl(e.target.value)} placeholder="https://..." />
-                      )}
-                    </div>
-                    <div className="md:col-span-1">
-                      <button disabled={isLoading} className="w-full bg-green-600 text-white p-2 rounded hover:bg-green-700"><i className="fas fa-plus"></i></button>
-                    </div>
-                  </form>
-
-                  <div className="mt-6">
-                    <h4 className="text-sm font-bold text-slate-500 mb-3">Mevcut İçerikler</h4>
-                    {folderContents.length === 0 ? <p className="text-sm text-slate-400 italic">Henüz içerik yok.</p> : (
-                      <ul className="space-y-2">
-                        {folderContents.map(c => (
-                          <li key={c.id} className="flex justify-between items-center p-3 bg-slate-50 rounded border border-slate-100">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-8 h-8 rounded flex items-center justify-center text-white ${c.type === 'pdf' ? 'bg-red-500' : 'bg-blue-500'}`}>
-                                <i className={`fas ${c.type === 'pdf' ? 'fa-file-pdf' : 'fa-link'}`}></i>
-                              </div>
-                              <span className="font-medium text-slate-700">{c.title}</span>
-                              <a href={c.url} target="_blank" className="text-xs text-blue-400 hover:underline truncate max-w-[200px]">{c.url}</a>
-                            </div>
-                            <button onClick={() => handleDeleteFolderItem(c.id)} className="text-red-400 hover:text-red-600"><i className="fas fa-trash"></i></button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="bg-blue-50 p-6 rounded-xl border border-blue-100 text-blue-800 mb-8">
-                <p><i className="fas fa-info-circle mr-2"></i> Soldan bir klasör seçerek içine dosya yükleyebilirsiniz. Şifre yönetimi için aşağıya bakın.</p>
-              </div>
-            )}
-
-            {/* GLOBAL KEY MANAGEMENT SECTION */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-              <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Şifre Yönetimi</h3>
-              <p className="text-sm text-slate-500 mb-4">Buradan oluşturacağınız şifreler, seçeceğiniz klasörlere erişim sağlar.</p>
-
-              <form onSubmit={handleCreateFolderKey} className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                {/* Left: Key Details */}
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 block mb-1">Şifre</label>
-                    <input type="text" className="w-full border p-2 rounded font-mono font-bold text-lg text-blue-600" value={newFolderKey} onChange={(e) => setNewFolderKey(e.target.value)} placeholder="Örn: 2025DERS" required />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 block mb-1">Not / Öğrenci Adı</label>
-                    <input type="text" className="w-full border p-2 rounded" value={newFolderKeyNote} onChange={(e) => setNewFolderKeyNote(e.target.value)} placeholder="Örn: Tüm Sınıf" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 block mb-1">Geçerlilik Süresi (Opsiyonel)</label>
-                    <input type="datetime-local" className="w-full border p-2 rounded text-sm" value={keyExpiresAt} onChange={(e) => setKeyExpiresAt(e.target.value)} />
-                    <p className="text-xs text-slate-400 mt-1">Boş bırakılırsa süresiz olur.</p>
-                  </div>
-                  <div className="flex items-center gap-2 pt-2">
-                    <input type="checkbox" id="allowPrint" className="w-4 h-4 text-blue-600 rounded" checked={allowPrint} onChange={(e) => setAllowPrint(e.target.checked)} />
-                    <label htmlFor="allowPrint" className="text-sm font-bold text-slate-700 cursor-pointer">Yazdırma İzni Ver</label>
-                  </div>
-                </div>
-
-                {/* Right: Folder Selection */}
+      {/* Permission Modal */}
+      {
+        permModalOpen && selectedUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+            <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-slide-up">
+              <div className="p-6 border-b flex items-center gap-4 bg-slate-50">
+                <img src={selectedUser.avatarUrl || ''} className="w-12 h-12 rounded-full border-2 border-white shadow-sm" />
                 <div>
-                  <label className="text-xs font-bold text-slate-500 block mb-2">Erişilebilecek Klasörler</label>
-                  <div className="max-h-48 overflow-y-auto border rounded bg-white p-2 space-y-1">
+                  <h3 className="text-lg font-bold text-slate-800">{selectedUser.fullName}</h3>
+                  <p className="text-sm text-slate-500">{selectedUser.email}</p>
+                </div>
+              </div>
+              <div className="p-6 space-y-6">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Erişim İzni Verilecek Dersler</label>
+                  <div className="max-h-60 overflow-y-auto border rounded-xl p-3 grid grid-cols-1 md:grid-cols-2 gap-2 bg-slate-50">
                     {folders.map(f => (
-                      <label key={f.id} className="flex items-center gap-2 p-1 hover:bg-slate-50 cursor-pointer text-sm">
+                      <label key={f.id} className={`flex items-center gap-2 p-2 rounded cursor-pointer border transition ${permFolderIds.includes(f.id) ? 'bg-blue-50 border-blue-200' : 'bg-white border-transparent'}`}>
                         <input
                           type="checkbox"
-                          checked={selectedFolderIdsForKey.includes(f.id)}
+                          className="w-4 h-4 text-blue-600 rounded"
+                          checked={permFolderIds.includes(f.id)}
                           onChange={(e) => {
-                            if (e.target.checked) setSelectedFolderIdsForKey(prev => [...prev, f.id]);
-                            else setSelectedFolderIdsForKey(prev => prev.filter(id => id !== f.id));
+                            if (e.target.checked) setPermFolderIds(prev => [...prev, f.id]);
+                            else setPermFolderIds(prev => prev.filter(id => id !== f.id));
                           }}
-                          className="rounded text-blue-600"
                         />
-                        <i className="fas fa-folder text-yellow-400"></i>
-                        {f.title}
+                        <i className="fas fa-folder text-yellow-500"></i>
+                        <span className="text-sm font-medium text-slate-700">{f.title}</span>
                       </label>
                     ))}
-                    {folders.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Hiç klasör yok.</p>}
-                  </div>
-                  <div className="mt-4">
-                    <button className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 font-bold shadow-md shadow-blue-200">Şifre Oluştur</button>
                   </div>
                 </div>
-              </form>
+                <div className="grid grid-cols-2 gap-6">
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Erişim Bitiş Tarihi</label>
+                    <input type="datetime-local" className="w-full border p-2 rounded-lg" value={permExpiresAt} onChange={(e) => setPermExpiresAt(e.target.value)} />
+                    <p className="text-[10px] text-slate-400 mt-1">Boş bırakılırsa süresiz erişim.</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Yazdırma Hakkı</label>
+                    <div className="flex items-center gap-3 p-2 border rounded-lg bg-white">
+                      <div className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${permCanPrint ? 'bg-green-500' : 'bg-slate-300'}`} onClick={() => setPermCanPrint(!permCanPrint)}>
+                        <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${permCanPrint ? 'translate-x-4' : 'translate-x-0'}`}></div>
+                      </div>
+                      <span className="text-sm font-bold text-slate-700">{permCanPrint ? 'Yazdırabilir' : 'Yazdıramaz'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="p-4 bg-slate-50 border-t flex justify-end gap-3">
+                <button onClick={() => setPermModalOpen(false)} className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-200 rounded-lg transition">İptal</button>
+                <button onClick={handleSavePermissions} className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-200 transition">Kaydet</button>
+              </div>
+            </div>
+          </div>
+        )
+      }
 
-              {/* Keys List */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-600 border-b"><th className="p-3">Şifre</th><th className="p-3">Kapsam</th><th className="p-3">Not</th><th className="p-3">Yazdır</th><th className="p-3">Bitiş</th><th className="p-3 text-right">Sil</th></tr>
+      {
+        deviceModalOpen && selectedUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+            <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-slide-up">
+              <div className="p-6 border-b flex items-center justify-between bg-slate-50">
+                <div className="flex items-center gap-4">
+                  <img src={selectedUser.avatarUrl || ''} className="w-12 h-12 rounded-full border-2 border-white shadow-sm" />
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">{selectedUser.fullName} - Cihazlar</h3>
+                    <p className="text-sm text-slate-500">Kayıtlı IP Adresleri</p>
+                  </div>
+                </div>
+                <button onClick={() => setDeviceModalOpen(false)} className="text-slate-400 hover:text-slate-600"><i className="fas fa-times text-xl"></i></button>
+              </div>
+              <div className="p-0">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
+                    <tr><th className="p-4">IP Adresi</th><th className="p-4">Son Erişim</th><th className="p-4">Durum</th><th className="p-4 text-right">İşlem</th></tr>
                   </thead>
-                  <tbody>
-                    {folderKeys.map(k => (
-                      <tr key={k.id} className="border-b hover:bg-slate-50">
-                        <td className="p-3 font-mono font-bold text-blue-600 text-lg">{k.keyCode}</td>
-                        <td className="p-3">
-                          <div className="flex flex-wrap gap-1 max-w-xs">
-                            {k.folderIds?.map(fid => {
-                              const f = folders.find(fo => fo.id === fid);
-                              return f ? <span key={fid} className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded border border-yellow-200">{f.title}</span> : null;
-                            })}
-                            {(!k.folderIds || k.folderIds.length === 0) && <span className="text-xs text-red-400">Klasör Yok</span>}
-                          </div>
+                  <tbody className="divide-y">
+                    {userDevices.map(d => (
+                      <tr key={d.id} className="hover:bg-slate-50">
+                        <td className="p-4 font-mono text-sm">{d.ip_address}</td>
+                        <td className="p-4 text-sm text-slate-500">{new Date(d.last_used_at).toLocaleString()}</td>
+                        <td className="p-4">
+                          {d.is_approved ?
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold">Onaylı</span> :
+                            <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded font-bold animate-pulse">Onay Bekliyor</span>
+                          }
                         </td>
-                        <td className="p-3 text-slate-600">{k.note || '-'}</td>
-                        <td className="p-3">
-                          {k.allowPrint ? <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold">Evet</span> : <span className="text-xs bg-red-50 text-red-400 px-2 py-1 rounded">Hayır</span>}
+                        <td className="p-4 text-right flex justify-end gap-2">
+                          <button
+                            onClick={() => handleToggleDevice(d.id, d.is_approved)}
+                            className={`px-3 py-1 rounded text-xs font-bold transition ${d.is_approved ? 'bg-red-50 text-red-500 hover:bg-red-100' : 'bg-green-500 text-white hover:bg-green-600'}`}
+                          >
+                            {d.is_approved ? 'Yasakla' : 'Onayla'}
+                          </button>
+                          <button onClick={() => handleDeleteDevice(d.id)} className="text-slate-400 hover:text-red-500"><i className="fas fa-trash"></i></button>
                         </td>
-                        <td className="p-3">
-                          {k.expiresAt ? (
-                            <span className={`text-xs font-bold px-2 py-1 rounded ${k.expiresAt < Date.now() ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                              {new Date(k.expiresAt).toLocaleString()}
-                            </span>
-                          ) : <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded">Süresiz</span>}
-                        </td>
-                        <td className="p-3 text-right"><button onClick={() => handleDeleteFolderKey(k.id)} className="text-red-500 hover:bg-red-50 p-2 rounded transition"><i className="fas fa-trash"></i></button></td>
                       </tr>
                     ))}
+                    {userDevices.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-slate-400 italic">Kayıtlı cihaz yok.</td></tr>}
                   </tbody>
                 </table>
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+
+      {
+        adminTab === 'KEYS' ? (
+          // --- LEGACY KEYS VIEW ---
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+              <h2 className="text-xl font-semibold mb-4 text-slate-700">Dosya/Klasör (Eski)</h2>
+              <form onSubmit={handleCreateCollection} className="space-y-4">
+                <input type="text" placeholder="Klasör Adı" className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={newColName} onChange={(e) => setNewColName(e.target.value)} />
+                <button className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition">Klasör Ekle</button>
+              </form>
+              <div className="mt-6">
+                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2">Mevcut Klasörler</h3>
+                <ul className="space-y-2">{collections.map(c => <li key={c.id} className="p-2 bg-slate-50 rounded flex justify-between"><span><i className="fas fa-folder text-blue-500 mr-2"></i>{c.name}</span></li>)}</ul>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-semibold text-slate-700">Tekil İçerik Ekle (Erişim Kodlu)</h2>
+                <div className="flex bg-slate-100 p-1 rounded-lg">
+                  <button onClick={() => { setActiveTab('FILE'); setBookFile(null); }} className={`px-4 py-2 text-sm font-bold rounded-md transition ${activeTab === 'FILE' ? 'bg-white text-blue-600 shadow' : 'text-slate-500'}`}>PDF</button>
+                  <button onClick={() => { setActiveTab('LINK'); setBookFile(null); }} className={`px-4 py-2 text-sm font-bold rounded-md transition ${activeTab === 'LINK' ? 'bg-white text-blue-600 shadow' : 'text-slate-500'}`}>Link</button>
+                </div>
+              </div>
+              <form onSubmit={handleUploadBook} className="space-y-4">
+                <input type="text" placeholder="Başlık" className="w-full border p-2 rounded" value={newBookName} onChange={(e) => setNewBookName(e.target.value)} required />
+                {activeTab === 'LINK' ?
+                  <input type="url" placeholder="URL" className="w-full border p-2 rounded" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} required /> :
+                  <input type="file" accept="application/pdf" className="w-full border p-2 rounded" onChange={(e) => setBookFile(e.target.files?.[0] || null)} required />
+                }
+                <div className="grid grid-cols-2 gap-4">
+                  <input type="text" placeholder="Erişim Şifresi" className="border p-2 rounded" value={newBookPass} onChange={(e) => setNewBookPass(e.target.value)} required />
+                  <select className="border p-2 rounded" value={selectedCol} onChange={(e) => setSelectedCol(e.target.value)} required>
+                    <option value="">Klasör Seç</option>
+                    {collections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <button disabled={isLoading} className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700">{isLoading ? 'Yükleniyor...' : 'Kaydet'}</button>
+              </form>
+
+              <div className="mt-8 overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead><tr className="bg-slate-50"><th className="p-3">Ad</th><th className="p-3">Kod</th><th className="p-3">Limit</th><th className="p-3">Sil</th></tr></thead>
+                  <tbody>
+                    {books.map(b => {
+                      const k = keys.find(k => k.bookId === b.id);
+                      return (
+                        <tr key={b.id} className="border-b">
+                          <td className="p-3">{b.name}</td>
+                          <td className="p-3 font-mono bg-slate-100 rounded">{k?.key}</td>
+                          <td className="p-3">{k?.printCount}/{k?.printLimit}</td>
+                          <td className="p-3"><button onClick={() => handleDeleteBook(b.id)} className="text-red-500"><i className="fas fa-trash"></i></button></td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        ) : (
+          // --- NEW COURSES VIEW ---
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            {/* Sidebar: Folders Tree */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 lg:col-span-1">
+              <h2 className="text-lg font-bold text-slate-700 mb-4">Ders Klasörleri</h2>
+
+              {/* Create Folder Form */}
+              <form onSubmit={handleCreateFolder} className="mb-6 border-b pb-4">
+                <label className="text-xs font-bold text-slate-500 block mb-1">Yeni Klasör Oluştur</label>
+                <div className="text-xs text-blue-500 mb-2">
+                  {activeFolderId ? `"${folders.find(f => f.id === activeFolderId)?.title}" içine` : 'Ana Dizin'}
+                </div>
+                <div className="flex gap-2">
+                  <input type="text" placeholder="Klasör Adı" className="w-full border p-2 rounded text-sm" value={newFolderTitle} onChange={(e) => setNewFolderTitle(e.target.value)} />
+                  <button className="bg-blue-600 text-white px-3 rounded hover:bg-blue-700">+</button>
+                </div>
+                {activeFolderId && (
+                  <button type="button" onClick={() => setActiveFolderId(null)} className="text-xs text-red-500 mt-2 underline">Ana Dizine Dön</button>
+                )}
+              </form>
+
+              {/* Folder List (Filtered by Parent) */}
+              <ul className="space-y-2">
+                {folders.filter(f => f.parentId === activeFolderId).length === 0 && <p className="text-xs text-slate-400 italic">Bu klasör boş.</p>}
+                {folders.filter(f => f.parentId === activeFolderId).map(f => (
+                  <li key={f.id}
+                    onClick={() => handleSelectFolder(f.id)}
+                    className={`p-3 rounded-lg cursor-pointer flex justify-between items-center transition ${activeFolderId === f.id ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'hover:bg-slate-50 text-slate-600'}`}
+                  >
+                    <span className="font-medium truncate flex-1"><i className={`fas ${activeFolderId === f.id ? 'fa-folder-open' : 'fa-folder'} mr-2`}></i>{f.title}</span>
+                    <button onClick={(e) => { e.stopPropagation(); handleDeleteFolder(f.id); }} className="text-slate-400 hover:text-red-500 px-2"><i className="fas fa-trash-alt"></i></button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Main Content: Folder Details & Key Management */}
+            <div className="lg:col-span-3 space-y-8">
+              {activeFolderId ? (
+                <>
+                  {/* Folder Header */}
+                  <div className="flex items-center gap-2 text-slate-500 text-sm mb-2">
+                    <span onClick={() => setActiveFolderId(null)} className="cursor-pointer hover:underline">Ana Dizin</span>
+                    <i className="fas fa-chevron-right text-xs"></i>
+                    <span className="font-bold text-slate-800">{folders.find(f => f.id === activeFolderId)?.title}</span>
+                  </div>
+
+                  {/* Add Content Section */}
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">İçerik Ekle</h3>
+                    <form onSubmit={handleAddItemToFolder} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                      <div className="md:col-span-3">
+                        <label className="text-xs font-bold text-slate-500">Tür</label>
+                        <select className="w-full border p-2 rounded" value={newItemType} onChange={(e) => setNewItemType(e.target.value as any)}>
+                          <option value="pdf">PDF Dosyası</option>
+                          <option value="link">Web Linki</option>
+                        </select>
+                      </div>
+                      <div className="md:col-span-4">
+                        <label className="text-xs font-bold text-slate-500">İçerik Başlığı</label>
+                        <input type="text" className="w-full border p-2 rounded" value={newItemTitle} onChange={(e) => setNewItemTitle(e.target.value)} placeholder="Örn: Hafta 1 Notları" required />
+                      </div>
+                      <div className="md:col-span-4">
+                        <label className="text-xs font-bold text-slate-500">{newItemType === 'pdf' ? 'Dosya' : 'URL'}</label>
+                        {newItemType === 'pdf' ? (
+                          <input type="file" accept="application/pdf" className="w-full text-sm" onChange={(e) => setNewItemFile(e.target.files?.[0] || null)} />
+                        ) : (
+                          <input type="url" className="w-full border p-2 rounded" value={newItemUrl} onChange={(e) => setNewItemUrl(e.target.value)} placeholder="https://..." />
+                        )}
+                      </div>
+                      <div className="md:col-span-1">
+                        <button disabled={isLoading} className="w-full bg-green-600 text-white p-2 rounded hover:bg-green-700"><i className="fas fa-plus"></i></button>
+                      </div>
+                    </form>
+
+                    <div className="mt-6">
+                      <h4 className="text-sm font-bold text-slate-500 mb-3">Mevcut İçerikler</h4>
+                      {folderContents.length === 0 ? <p className="text-sm text-slate-400 italic">Henüz içerik yok.</p> : (
+                        <ul className="space-y-2">
+                          {folderContents.map(c => (
+                            <li key={c.id} className="flex justify-between items-center p-3 bg-slate-50 rounded border border-slate-100">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded flex items-center justify-center text-white ${c.type === 'pdf' ? 'bg-red-500' : 'bg-blue-500'}`}>
+                                  <i className={`fas ${c.type === 'pdf' ? 'fa-file-pdf' : 'fa-link'}`}></i>
+                                </div>
+                                <span className="font-medium text-slate-700">{c.title}</span>
+                                <a href={c.url} target="_blank" className="text-xs text-blue-400 hover:underline truncate max-w-[200px]">{c.url}</a>
+                              </div>
+                              <button onClick={() => handleDeleteFolderItem(c.id)} className="text-red-400 hover:text-red-600"><i className="fas fa-trash"></i></button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-blue-50 p-6 rounded-xl border border-blue-100 text-blue-800 mb-8">
+                  <p><i className="fas fa-info-circle mr-2"></i> Soldan bir klasör seçerek içine dosya yükleyebilirsiniz. Şifre yönetimi için aşağıya bakın.</p>
+                </div>
+              )}
+
+              {/* GLOBAL KEY MANAGEMENT SECTION */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Şifre Yönetimi</h3>
+                <p className="text-sm text-slate-500 mb-4">Buradan oluşturacağınız şifreler, seçeceğiniz klasörlere erişim sağlar.</p>
+
+                <form onSubmit={handleCreateFolderKey} className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  {/* Left: Key Details */}
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 block mb-1">Şifre</label>
+                      <input type="text" className="w-full border p-2 rounded font-mono font-bold text-lg text-blue-600" value={newFolderKey} onChange={(e) => setNewFolderKey(e.target.value)} placeholder="Örn: 2025DERS" required />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 block mb-1">Not / Öğrenci Adı</label>
+                      <input type="text" className="w-full border p-2 rounded" value={newFolderKeyNote} onChange={(e) => setNewFolderKeyNote(e.target.value)} placeholder="Örn: Tüm Sınıf" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 block mb-1">Geçerlilik Süresi (Opsiyonel)</label>
+                      <input type="datetime-local" className="w-full border p-2 rounded text-sm" value={keyExpiresAt} onChange={(e) => setKeyExpiresAt(e.target.value)} />
+                      <p className="text-xs text-slate-400 mt-1">Boş bırakılırsa süresiz olur.</p>
+                    </div>
+                    <div className="flex items-center gap-2 pt-2">
+                      <input type="checkbox" id="allowPrint" className="w-4 h-4 text-blue-600 rounded" checked={allowPrint} onChange={(e) => setAllowPrint(e.target.checked)} />
+                      <label htmlFor="allowPrint" className="text-sm font-bold text-slate-700 cursor-pointer">Yazdırma İzni Ver</label>
+                    </div>
+                  </div>
+
+                  {/* Right: Folder Selection */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 block mb-2">Erişilebilecek Klasörler</label>
+                    <div className="max-h-48 overflow-y-auto border rounded bg-white p-2 space-y-1">
+                      {folders.map(f => (
+                        <label key={f.id} className="flex items-center gap-2 p-1 hover:bg-slate-50 cursor-pointer text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selectedFolderIdsForKey.includes(f.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedFolderIdsForKey(prev => [...prev, f.id]);
+                              else setSelectedFolderIdsForKey(prev => prev.filter(id => id !== f.id));
+                            }}
+                            className="rounded text-blue-600"
+                          />
+                          <i className="fas fa-folder text-yellow-400"></i>
+                          {f.title}
+                        </label>
+                      ))}
+                      {folders.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Hiç klasör yok.</p>}
+                    </div>
+                    <div className="mt-4">
+                      <button className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 font-bold shadow-md shadow-blue-200">Şifre Oluştur</button>
+                    </div>
+                  </div>
+                </form>
+
+                {/* Keys List */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-600 border-b"><th className="p-3">Şifre</th><th className="p-3">Kapsam</th><th className="p-3">Not</th><th className="p-3">Yazdır</th><th className="p-3">Bitiş</th><th className="p-3 text-right">Sil</th></tr>
+                    </thead>
+                    <tbody>
+                      {folderKeys.map(k => (
+                        <tr key={k.id} className="border-b hover:bg-slate-50">
+                          <td className="p-3 font-mono font-bold text-blue-600 text-lg">{k.keyCode}</td>
+                          <td className="p-3">
+                            <div className="flex flex-wrap gap-1 max-w-xs">
+                              {k.folderIds?.map(fid => {
+                                const f = folders.find(fo => fo.id === fid);
+                                return f ? <span key={fid} className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded border border-yellow-200">{f.title}</span> : null;
+                              })}
+                              {(!k.folderIds || k.folderIds.length === 0) && <span className="text-xs text-red-400">Klasör Yok</span>}
+                            </div>
+                          </td>
+                          <td className="p-3 text-slate-600">{k.note || '-'}</td>
+                          <td className="p-3">
+                            {k.allowPrint ? <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold">Evet</span> : <span className="text-xs bg-red-50 text-red-400 px-2 py-1 rounded">Hayır</span>}
+                          </td>
+                          <td className="p-3">
+                            {k.expiresAt ? (
+                              <span className={`text-xs font-bold px-2 py-1 rounded ${k.expiresAt < Date.now() ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                                {new Date(k.expiresAt).toLocaleString()}
+                              </span>
+                            ) : <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded">Süresiz</span>}
+                          </td>
+                          <td className="p-3 text-right"><button onClick={() => handleDeleteFolderKey(k.id)} className="text-red-500 hover:bg-red-50 p-2 rounded transition"><i className="fas fa-trash"></i></button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+    </div >
   );
 };
 export default AdminDashboard;

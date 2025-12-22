@@ -51,4 +51,34 @@ export interface FolderKey {
   createdAt: number;
 }
 
+// -- NEW TYPES FOR AUTH & USER MANAGEMENT --
+export interface UserProfile {
+  id: string; // matches auth.users.id
+  email: string;
+  fullName: string | null;
+  avatarUrl: string | null;
+  isOnline: boolean;
+  lastSeen: string | null; // ISO Date string
+}
+
+export interface UserPermission {
+  id: string;
+  userId: string;
+  folderIds: string[]; // List of folder UUIDs user can access
+  canPrint: boolean;
+  expiresAt: string | null; // ISO Date string
+}
+
+export interface ActivityLog {
+  id: string;
+  userId: string | null;
+  userEmail?: string; // Joined field for display
+  actionType: 'LOGIN' | 'LOGOUT' | 'VIEW_FILE' | 'PRINT_FILE' | 'FOLDER_ACCESS';
+  targetId: string | null;
+  details: string | null;
+  createdAt: string;
+}
+
 export type ViewState = 'USER_LOGIN' | 'USER_VIEWER' | 'ADMIN_LOGIN' | 'ADMIN_DASHBOARD' | 'USER_FOLDER_VIEW';
+
+
