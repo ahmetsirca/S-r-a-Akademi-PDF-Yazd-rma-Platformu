@@ -30,9 +30,10 @@ interface SinglePDFPageProps {
   penColor: string;
   annotations: AnnotationPath[];
   onAnnotationAdd: (page: number, path: AnnotationPath) => void;
+  onPageLoad: (page: number, height: number) => void;
 }
 
-const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width, toolMode, penColor, annotations, onAnnotationAdd }) => {
+const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width, toolMode, penColor, annotations, onAnnotationAdd, onPageLoad }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
   const currentPath = useRef<{ x: number, y: number }[]>([]);
@@ -113,7 +114,8 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    if (canvas.parentElement) {
+    // Sync canvas size with parent if needed
+    if (canvas.parentElement && canvas.width !== canvas.parentElement.clientWidth) {
       canvas.width = canvas.parentElement.clientWidth;
       canvas.height = canvas.parentElement.clientHeight;
     }
@@ -147,15 +149,36 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
     });
   }, [annotations, scale, width]);
 
+  const handlePageLoadSuccess = (page: any) => {
+    // page.originalHeight / page.originalWidth gives aspect ratio, but we want rendered height
+    // The Page component renders at the given 'width'.
+    const viewport = page.getViewport({ scale: scale });
+    // We can approximate or just presume the component size.
+    // Better: Use the ref of the container wrapper?
+    // Actually 'page' object has height.
+    // But we are using width-based scaling.
+    // Let's trust the rendered DOM element height if we can, or calculate it.
+    // Viewport height is accurate.
+    // scale prop in Page component combines with width. 
+    // If width is provided, Page ignores scale for sizing and updates it to fit width.
+    // Let's assume onPageLoad gives us the page proxy.
+    // Calculate rendered height: originalHeight * (renderedWidth / originalWidth)
+    const renderedHeight = page.originalHeight * (width / page.originalWidth);
+    onPageLoad(pageNumber, renderedHeight);
+  };
+
   return (
-    <div id={`page-${pageNumber}`} className="mb-4 relative shadow-lg group">
+    <div className="relative shadow-lg group w-full" style={{ minHeight: width * 1.4 }}>
       <Page
         pageNumber={pageNumber}
-        scale={scale}
-        width={width}
+        width={width} // 'scale' is ignored when width is set usually, need to check
+        scale={scale} // Actually react-pdf uses scale * width if both? No. width overrides.
+        // If we want zoom, we should adjust 'width' passed to this component OR use scale if no width.
+        // We are passing width, so efficient zoom means changing 'width'.
         renderAnnotationLayer={false}
-        renderTextLayer={true} // Essential for selection
-        loading={<div className="h-96 bg-white animate-pulse" />}
+        renderTextLayer={true}
+        onLoadSuccess={handlePageLoadSuccess}
+        loading={<div className="bg-white animate-pulse w-full" style={{ height: width * 1.41 }} />}
       >
         <canvas
           ref={canvasRef}
@@ -195,6 +218,9 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   const [penColor, setPenColor] = useState('#EF4444'); // Red default
 
   const [annotations, setAnnotations] = useState<Record<number, AnnotationPath[]>>({});
+
+  // Virtualization State
+  const [pageHeights, setPageHeights] = useState<Record<number, number>>({});
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(window.innerWidth);
@@ -261,6 +287,10 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     return () => { observer.disconnect(); window.removeEventListener('resize', updateWidth); }
   }, []);
 
+  const handlePageLoad = (page: number, height: number) => {
+    setPageHeights(prev => ({ ...prev, [page]: height }));
+  };
+
   // PDF Loading
   useEffect(() => {
     const loadContent = async () => {
@@ -287,10 +317,11 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     if (saved) {
       const p = parseInt(saved);
       if (p > 1 && p <= numPages) {
+        // Delay scroll to allow render
         setTimeout(() => {
           const el = document.getElementById(`page-${p}`);
           if (el) el.scrollIntoView();
-        }, 500);
+        }, 800);
       }
     }
   };
@@ -303,17 +334,19 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         if (entry.isIntersecting) {
           const id = entry.target.id;
           const num = parseInt(id.replace('page-', ''));
-          setCurrentPage(num);
+          if (!isNaN(num)) setCurrentPage(num);
         }
       });
-    }, { threshold: 0.5 });
+    }, { threshold: 0.1, rootMargin: "-10% 0px -10% 0px" }); // Improved margin for better trigger
 
     for (let i = 1; i <= numPages; i++) {
       const el = document.getElementById(`page-${i}`);
       if (el) observer.observe(el);
     }
     return () => observer.disconnect();
-  }, [numPages, pdfUrl]);
+  }, [numPages, pdfUrl]); // Note: dependency on 'pdfUrl' to re-attach if doc reloads, but persistent divs mean we are safe mostly. 
+  // However, if we scroll fast, new divs are already there. The problem is if React unmounts/remounts the wrapper.
+  // With the map below, the KEY is stable, so wrapper is stable.
 
   const handleZoom = (delta: number) => {
     setScale(prev => Math.min(Math.max(0.5, prev + delta), 3.0));
@@ -355,7 +388,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     };
   };
 
-  // Focus Protection disabled for testing ease? No, keep it.
+  // Focus Protection
   const [isFocused, setIsFocused] = useState(true);
   useEffect(() => {
     const onBlur = () => setIsFocused(false);
@@ -365,10 +398,19 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     return () => { window.removeEventListener('blur', onBlur); window.removeEventListener('focus', onFocus); };
   }, []);
 
+  // Calculate generic page width/height for placeholders
+  const getPageWidth = () => containerWidth > 0 ? Math.min(containerWidth - 32, 1000) : 800;
+  // Apply zoom to width? No, width prop handles it usually, but let's be consistent.
+  // If we pass 'width' to Page, 'scale' is often secondary. 
+  // For 'react-pdf', if width is given, it scales to that width. 
+  // If we want to Zoom *in*, we should increase the passed WIDTH.
+  const renderedWidth = getPageWidth() * scale;
+  const estimatedHeight = renderedWidth * 1.414;
+
   return (
     <div className={`fixed inset-0 bg-slate-900 flex flex-col z-50 select-none ${!isFocused ? 'blur-xl' : ''}`}>
 
-      {/* Sidebar Toolbar (Desktop: Left, Mobile: Bottom/Hidden) */}
+      {/* Sidebar Toolbar */}
       <div className="absolute top-1/2 left-4 md:flex flex-col gap-2 bg-slate-800 border border-slate-600 rounded-xl p-2 hidden transform -translate-y-1/2 shadow-2xl z-[60]">
         <button onClick={() => setToolMode('CURSOR')}
           className={`p-3 rounded-lg transition ${toolMode === 'CURSOR' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Seçim / İmleç">
@@ -439,18 +481,34 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
         {pdfUrl ? (
           <Document file={pdfUrl} onLoadSuccess={onDocumentLoadSuccess} loading={<div className="text-white">Yükleniyor...</div>}>
-            {numPages && Array.from(new Array(numPages), (el, index) => (
-              <SinglePDFPage
-                key={`page-${index + 1}`}
-                pageNumber={index + 1}
-                scale={scale}
-                width={containerWidth > 0 ? Math.min(containerWidth - 32, 1000) : 800}
-                toolMode={toolMode}
-                penColor={penColor}
-                annotations={annotations[index + 1] || []}
-                onAnnotationAdd={addAnnotation}
-              />
-            ))}
+            {numPages && Array.from(new Array(numPages)).map((_, index) => {
+              const pageNum = index + 1;
+              // Virtualization: Only render pages around the current one
+              // A buffer of 2 above and 2 below is good. 5 pages total.
+              const isVisible = Math.abs(pageNum - currentPage) <= 2;
+              const height = pageHeights[pageNum] || estimatedHeight;
+
+              return (
+                <div key={`page-wrapper-${pageNum}`} id={`page-${pageNum}`} className="mb-4 transition-all duration-300" style={{ minHeight: height, width: renderedWidth }}>
+                  {isVisible ? (
+                    <SinglePDFPage
+                      pageNumber={pageNum}
+                      scale={scale} // We handle scale in width calc, but passing scale ensures react-pdf knows
+                      width={renderedWidth}
+                      toolMode={toolMode}
+                      penColor={penColor}
+                      annotations={annotations[pageNum] || []}
+                      onAnnotationAdd={addAnnotation}
+                      onPageLoad={handlePageLoad}
+                    />
+                  ) : (
+                    <div className="bg-slate-400/20 rounded-lg animate-pulse flex items-center justify-center text-slate-400 font-bold text-2xl" style={{ height: height, width: renderedWidth }}>
+                      {pageNum}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </Document>
         ) : <div className="text-white">Dosya hazırlanıyor...</div>}
       </div>
