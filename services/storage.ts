@@ -230,13 +230,33 @@ export const StorageService = {
   // Folder Keys
   getFolderKeys: async (): Promise<import('../types').FolderKey[]> => {
     // Fetch ALL keys, filtering will happen in UI or we can add args if needed
-    const { data } = await supabase.from('folder_keys').select('*').order('created_at', { ascending: false });
+    // Explicitly select columns to avoid "Could not find column" errors if schema cache is stale
+    const { data, error } = await supabase
+      .from('folder_keys')
+      .select('id, folder_ids, key_code, note, allow_print, expires_at, created_at')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn("Folder Keys Fetch Error (ignoring allow_print if missing):", error);
+      // Fallback: If specific column fails, try basic select
+      const { data: fallbackData } = await supabase.from('folder_keys').select('*').order('created_at', { ascending: false });
+      return (fallbackData || []).map((k: any) => ({
+        id: k.id,
+        folderIds: k.folder_ids || [],
+        keyCode: k.key_code,
+        note: k.note,
+        allowPrint: k.allow_print === true, // Strict check or default false
+        expiresAt: k.expires_at ? new Date(k.expires_at).getTime() : null,
+        createdAt: new Date(k.created_at).getTime()
+      }));
+    }
+
     return (data || []).map((k: any) => ({
       id: k.id,
-      folderIds: k.folder_ids || [], // Handle array
+      folderIds: k.folder_ids || [],
       keyCode: k.key_code,
       note: k.note,
-      allowPrint: k.allow_print,
+      allowPrint: k.allow_print === true,
       expiresAt: k.expires_at ? new Date(k.expires_at).getTime() : null,
       createdAt: new Date(k.created_at).getTime()
     }));

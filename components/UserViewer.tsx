@@ -4,6 +4,7 @@ import { StorageService } from '../services/storage';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
+import '../index.css'; // Ensure tailwind is available
 
 // Set worker source - using static file for robustness
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
@@ -68,7 +69,11 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
     isDrawing.current = true;
     const p = getPoint(e);
     currentPath.current = [p];
-    if (e.type === 'touchstart') document.body.style.overflow = 'hidden';
+    if (e.type === 'touchstart') {
+      document.body.style.overflow = 'hidden';
+      // Prevent default to stop scrolling
+      // e.preventDefault(); // Don't prevent default here, let touch-action handle it
+    }
   };
 
   const draw = (e: any) => {
@@ -429,9 +434,10 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
           )}
 
           {/* Draw Toggle */}
+          {/* Draw Toggle (Desktop only - Mobile has floating bar) */}
           <button
             onClick={() => setDrawMode(!drawMode)}
-            className={`p-2 rounded-lg mr-4 transition ${drawMode ? 'bg-yellow-500 text-slate-900 border-2 border-yellow-600' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+            className={`hidden md:block p-2 rounded-lg mr-4 transition ${drawMode ? 'bg-yellow-500 text-slate-900 border-2 border-yellow-600' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
             title="Çizim Modu"
           >
             <i className="fas fa-pen"></i>
@@ -490,6 +496,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
                   onTouchStart={startDrawing}
                   onTouchMove={draw}
                   onTouchEnd={stopDrawing}
+                  style={{ touchAction: drawMode ? 'none' : 'auto' }}
                 />
               </Page>
             </Document>
@@ -500,6 +507,37 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
           <div className="flex items-center justify-center h-full text-slate-200">
             Yükleniyor...
           </div>
+        )}
+      </div>
+
+      {/* Mobile Floating Toolbar for Drawing */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800/90 backdrop-blur-md border border-slate-600 p-2 rounded-full shadow-2xl flex items-center gap-2 z-[60] transition-transform duration-300">
+        <button
+          onClick={() => setDrawMode(!drawMode)}
+          className={`w-12 h-12 rounded-full flex items-center justify-center text-xl transition ${drawMode ? 'bg-yellow-500 text-slate-900 shadow-[0_0_15px_rgba(234,179,8,0.5)] scale-110' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+            }`}
+        >
+          <i className={`fas ${drawMode ? 'fa-pen-nib' : 'fa-pen'}`}></i>
+        </button>
+
+        {drawMode && (
+          <>
+            <div className="w-px h-8 bg-slate-600 mx-1"></div>
+            <button
+              onClick={undoAnnotation}
+              className="w-10 h-10 rounded-full flex items-center justify-center text-slate-300 hover:bg-slate-700 hover:text-white transition active:scale-95"
+              title="Geri Al"
+            >
+              <i className="fas fa-undo"></i>
+            </button>
+            <button
+              onClick={clearPage}
+              className="w-10 h-10 rounded-full flex items-center justify-center text-red-400 hover:bg-red-500/20 transition active:scale-95"
+              title="Temizle"
+            >
+              <i className="fas fa-trash"></i>
+            </button>
+          </>
         )}
       </div>
 
