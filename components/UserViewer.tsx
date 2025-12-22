@@ -204,6 +204,13 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
   const [annotations, setAnnotations] = useState<Record<number, AnnotationPath[]>>({});
 
+  useEffect(() => {
+    console.log('UserViewer MOUNTED');
+    console.log('Book:', book);
+    console.log('PDF URL:', pdfUrl);
+    console.log('NumPages:', numPages);
+  }, [book, pdfUrl, numPages]);
+
   // Virtualization State
   const [pageHeights, setPageHeights] = useState<Record<number, number>>({});
 

@@ -201,19 +201,19 @@ const App: React.FC = () => {
     } else {
       // Open PDF in Secure Viewer
       // Open PDF in Secure Viewer
+      console.log('PDF Clicked:', content);
+
       const mockBook: PDFBook = {
         id: content.id,
         name: content.title,
         collectionId: content.folderId,
-        sourceType: 'FILE', // We know it's not a link here
+        sourceType: 'FILE',
         sourceUrl: content.url,
-        pdfData: content.url, // For FILE type, viewer attempts to fetch this
+        pdfData: content.url,
         createdAt: Date.now()
       };
 
-      // Use the verified folder key's permissions
       const limit = currentFolderKey?.allowPrint ? 9999 : 0;
-
       const mockKey: AccessKey = {
         id: 'folder-access',
         key: currentFolderKey?.keyCode || 'folder-key',
@@ -221,6 +221,10 @@ const App: React.FC = () => {
         printLimit: limit,
         printCount: 0
       };
+
+      console.log('Setting Active Book:', mockBook);
+      console.log('Setting Active Key:', mockKey);
+
       setActiveBook(mockBook);
       setActiveKey(mockKey);
       setView('USER_VIEWER');
