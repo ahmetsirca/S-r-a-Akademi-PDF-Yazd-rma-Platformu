@@ -212,6 +212,37 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
     setScale(prev => Math.min(Math.max(0.5, prev + delta), 3.0));
   };
 
+  // Pinch Zoom Logic
+  const touchStartDist = useRef<number | null>(null);
+  const touchStartScale = useRef<number>(1);
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      touchStartDist.current = dist;
+      touchStartScale.current = scale;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2 && touchStartDist.current !== null) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const ratio = dist / touchStartDist.current;
+      const newScale = Math.min(Math.max(0.5, touchStartScale.current * ratio), 3.0);
+      setScale(newScale);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    touchStartDist.current = null;
+  };
+
   const handleWheel = (e: React.WheelEvent) => {
     if (drawMode) return;
 
@@ -504,6 +535,9 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, onExit }) => {
         className="flex-1 relative bg-slate-500 overflow-auto flex justify-center p-4 outline-none pb-24" // Added pb-24 for mobile nav space
         style={{ overscrollBehavior: 'none' }}
         onWheel={handleWheel}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       // onScroll={handleScroll} // Disabled per request
       >
         {!isFocused && (
