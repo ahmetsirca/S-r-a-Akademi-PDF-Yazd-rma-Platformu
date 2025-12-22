@@ -68,6 +68,53 @@ export const AuthService = {
     },
 
     /**
+     * REDEEM CODE: Assign permissions to existing user
+     */
+    async redeemCode(userId: string, code: string): Promise<{ success: boolean, message: string }> {
+        // 1. Validate Code
+        const { data: folderKeys } = await supabase.from('folder_keys').select('*').eq('key_code', code);
+        const folderKey = folderKeys && folderKeys.length > 0 ? folderKeys[0] : null;
+
+        if (!folderKey) {
+            throw new Error("Geçersiz Erişim Şifresi.");
+        }
+
+        if (folderKey.expires_at && new Date(folderKey.expires_at) < new Date()) {
+            throw new Error("Girdiğiniz kodun süresi dolmuş.");
+        }
+
+        // 2. Grant Permissions
+        const newFolders = folderKey.folder_ids || [];
+        if (newFolders.length > 0) {
+            // Check existing permissions
+            const { data: existingPerms } = await supabase.from('user_permissions').select('*').eq('user_id', userId).single();
+            let finalFolders = newFolders;
+            let canPrint = folderKey.allow_print;
+
+            if (existingPerms) {
+                // Merge folders
+                finalFolders = [...new Set([...(existingPerms.folder_ids || []), ...newFolders])];
+                // Merge print (if either allows, allow it)
+                canPrint = existingPerms.can_print || folderKey.allow_print;
+
+                await supabase.from('user_permissions').update({
+                    folder_ids: finalFolders,
+                    can_print: canPrint
+                }).eq('id', existingPerms.id);
+            } else {
+                await supabase.from('user_permissions').insert({
+                    user_id: userId,
+                    folder_ids: finalFolders,
+                    can_print: canPrint
+                });
+            }
+            return { success: true, message: "Erişim şifresi başarıyla tanımlandı." };
+        } else {
+            return { success: false, message: "Bu şifreye tanımlı klasör bulunamadı." };
+        }
+    },
+
+    /**
      * LOGIN: Verify Email + Password
      */
     async login(email: string, password: string): Promise<{ profile: UserProfile, unlockedFolders: string[], isDeviceApproved: boolean } | null> {
