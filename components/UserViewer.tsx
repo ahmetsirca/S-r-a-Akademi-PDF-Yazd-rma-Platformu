@@ -275,7 +275,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   /* Fix: Use callback to prevent infinite render loop */
   const handlePageLoad = React.useCallback((page: number, height: number) => {
     setPageHeights(prev => {
-      if (prev[page] === height) return prev; // No change, no re-render
+      // Use Math.round to ignore microscopic float differences (e.g. 800.00000001 vs 800)
+      if (prev[page] && Math.round(prev[page]) === Math.round(height)) return prev;
       return { ...prev, [page]: height };
     });
   }, []);
@@ -486,7 +487,12 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         {!isFocused && <div className="fixed inset-0 z-[100] bg-black/50 text-white flex items-center justify-center text-2xl font-bold">Odaklanın</div>}
 
         {pdfUrl ? (
-          <Document file={pdfUrl} onLoadSuccess={onDocumentLoadSuccess} loading={<div className="text-white">Yükleniyor...</div>}>
+          <Document
+            file={pdfUrl}
+            onLoadSuccess={onDocumentLoadSuccess}
+            onLoadError={(err) => { console.error("PDF Load Error:", err); alert("PDF yüklenemedi: " + err.message); }}
+            loading={<div className="text-white">Yükleniyor...</div>}
+          >
             {numPages && Array.from(new Array(numPages)).map((_, index) => {
               const pageNum = index + 1;
               // Virtualization: Only render pages around the current one
