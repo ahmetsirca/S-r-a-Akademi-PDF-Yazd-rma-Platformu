@@ -222,10 +222,10 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
       {/* Nav */}
       {view !== 'USER_VIEWER' && (
-        <nav className="p-4 flex justify-between items-center bg-white border-b border-slate-200 sticky top-0 z-50">
+        <nav className="p-4 flex justify-between items-center bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('USER_LOGIN')}>
             <div className="bg-blue-600 w-8 h-8 rounded flex items-center justify-center text-white shadow-sm">
               <i className="fas fa-book-open"></i>
@@ -250,7 +250,7 @@ const App: React.FC = () => {
       )}
 
       {/* Render View */}
-      <main>
+      <main className="pb-10">
         {view === 'USER_LOGIN' && (
           <>
             <div className="max-w-4xl mx-auto mt-12 grid md:grid-cols-2 gap-8 px-4">

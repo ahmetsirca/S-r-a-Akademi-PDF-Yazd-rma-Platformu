@@ -611,7 +611,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
               <Page
                 pageNumber={pageNumber}
                 scale={scale} // Scale is now relative to the fit-width
-                width={containerWidth ? Math.min(containerWidth - 32, 1200) : undefined} // Fit width minus padding, capped at 1200px
+                scale={scale}
+                width={containerWidth > 0 ? Math.min(containerWidth - 32, 1200) : Math.min(window.innerWidth - 32, 1200)}
                 renderAnnotationLayer={false}
                 renderTextLayer={true}
                 className="shadow-2xl relative"
