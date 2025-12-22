@@ -384,34 +384,35 @@ const App: React.FC = () => {
                           if (!loginCode) return alert("Lütfen şifre girin.");
                           setIsLoading(true);
                           try {
-                            // If logged in, assume we are adding to account?
-                            // Or if just code, we try to Login with Code (Special path)?
-                            // Given current backend, let's treat it as a "Login with Code" attempt if not logged in.
-                            // But the user requested "While registering".
-                            // Let's settle on: It works if you are logged in (adds perm) OR if you use it for login.
-                            // For now, reuse handleCustomAuth logic by forcing a "Code-Only Login" flow?
-                            // Actually, AuthService.login accepts code. We can try to login with JUST code? No, email required.
-                            // Let's assume this is strictly for "Unlocking" if user is already registered?
-                            // "Kullanıcının sayfaya girdiğinde Kayıt olurken onu da görsün".
-                            // It implies it's just an input.
-                            // Let's keep it simple: If they click "İlerle/Kaydet", if no email/pass is entered, what happens?
-                            // Maybe clicking this button triggers the same handleCustomAuth but sets mode?
-                            // No. Let's make this button JUST verify the key and unlock folders for the session if possible.
-                            // OR, if the user fills this AND the left form, it submits all?
-                            // The user asked for a "Separate Frame".
-                            // I'll make this button trigger a specific "Unlock" function.
                             if (userProfile) {
-                              // Add to existing user
-                              // We need an AuthService method for "Redeem Code". 
-                              // For now, let's just alert that it requires Login, OR try to find a way.
-                              // Actually, the previous implementation handled it in Login/Register.
-                              // Let's just store the code in state (loginCode) and tell user:
-                              // "Şifre girildi. Şimdi Giriş Yap veya Kayıt Ol butonuna basınız."
-                              alert("Şifre algılandı. Lütfen sol taraftan Giriş Yapın veya Kayıt Olun. Bu şifre hesabınıza tanımlanacaktır.");
+                              // User Logged In -> Redeem Code directly
+                              await AuthService.redeemCode(userProfile.id, loginCode);
+                              alert("Teşekkürler! Erişim şifreniz hesabınıza tanımlandı. İlgili klasörlere artık erişebilirsiniz.");
+                              setLoginCode('');
+
+                              // Refresh permissions
+                              DBService.getUserPermissions(userProfile.id).then(setUserPermission);
+                              // Refresh folders permissions locally if needed (re-login logic basically refreshes unclocked folders)
+                              // But visually, the user can just click folders.
+                              // Ideally we should reload the 'unlockedFolderIds' state
+                              const sess = await AuthService.checkPermissionAccess(userProfile.fullName, userProfile.email);
+                              if (sess) setUnlockedFolderIds(sess.unlockedFolders);
+
                             } else {
-                              alert("Şifre algılandı. Erişim sağlamak için lütfen sol taraftan Giriş Yapın veya Kayıt Olun.");
+                              // Not Logged In -> Just alert
+                              alert("Şifre algılandı. Erişim sağlamak için lütfen sol taraftan Giriş Yapın veya Kayıt Olun. Girdiğiniz şifre otomatik olarak hesabınıza eklenecektir.");
+                              // We keep loginCode in state so it populates the Login/Register flow automatically if we were to modify it to read from there.
+                              // But currently our Login/Register inputs read from their own state? 
+                              // Wait, 'loginCode' state is shared! 
+                              // const [loginCode, setLoginCode] = useState(''); declared at top of App
+                              // So when they type here, it updates the state used by Login/Register logic too!
+                              // So they just need to fill the rest of the form.
                             }
-                          } catch (e) { alert(e); } finally { setIsLoading(false); }
+                          } catch (e: any) {
+                            alert(e.message || "Hata oluştu.");
+                          } finally {
+                            setIsLoading(false);
+                          }
                         }}
                         className="bg-indigo-600 text-white px-4 rounded-lg hover:bg-indigo-700 font-bold shadow-md active:scale-95 transition"
                       >
