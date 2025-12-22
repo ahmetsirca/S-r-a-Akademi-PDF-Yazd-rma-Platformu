@@ -71,8 +71,10 @@ export const AuthService = {
      * REDEEM CODE: Assign permissions to existing user
      */
     async redeemCode(userId: string, code: string): Promise<{ success: boolean, message: string }> {
+        const cleanCode = code.trim();
         // 1. Validate Code
-        const { data: folderKeys } = await supabase.from('folder_keys').select('*').eq('key_code', code);
+        // Use textSearch or explicit trimmed match if needed, but eq should work with trimmed string
+        const { data: folderKeys } = await supabase.from('folder_keys').select('*').eq('key_code', cleanCode);
         const folderKey = folderKeys && folderKeys.length > 0 ? folderKeys[0] : null;
 
         if (!folderKey) {

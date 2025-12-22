@@ -308,7 +308,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     try {
       await StorageService.createFolderKey(
         selectedFolderIdsForKey,
-        newFolderKey,
+        newFolderKey.trim(),
         newFolderKeyNote,
         keyExpiresAt ? new Date(keyExpiresAt) : null,
         allowPrint
