@@ -182,7 +182,7 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
       >
         <canvas
           ref={canvasRef}
-          className={`absolute inset-0 z-50 ${toolMode === 'CURSOR' ? 'pointer-events-none' : 'cursor-crosshair touch-none'}`}
+          className={`absolute inset-0 z-[100] ${toolMode === 'CURSOR' ? 'pointer-events-none' : 'cursor-crosshair touch-none'}`}
           onMouseDown={startDrawing}
           onMouseMove={draw}
           onMouseUp={stopDrawing}
@@ -424,6 +424,14 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       className={`fixed inset-0 bg-slate-900 flex flex-col z-50 select-none ${!isFocused ? 'blur-xl' : ''}`}
       onContextMenu={(e) => e.preventDefault()}
     >
+      {/* CSS to ensure Drawing Canvas is always interactive and Text Layer doesn't block it */}
+      {toolMode !== 'CURSOR' && (
+        <style>{`
+            .react-pdf__Page__textContent, .react-pdf__Page__annotations {
+              pointer-events: none !important;
+            }
+         `}</style>
+      )}
 
       {/* Sidebar Toolbar */}
       <div className="absolute top-1/2 left-4 md:flex flex-col gap-2 bg-slate-800 border border-slate-600 rounded-xl p-2 hidden transform -translate-y-1/2 shadow-2xl z-[60]">
