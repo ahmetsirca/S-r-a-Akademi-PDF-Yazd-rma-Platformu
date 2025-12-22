@@ -253,7 +253,7 @@ const App: React.FC = () => {
           <>
             <div className="max-w-4xl mx-auto mt-12 grid md:grid-cols-2 gap-8 px-4">
               {/* Left: Login Panel */}
-              <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-100 h-fit">
+              <div className="bg-white p-6 md:p-8 rounded-2xl shadow-xl border border-slate-100 h-fit">
                 {userProfile ? (
                   <div className="text-center">
                     <div className="bg-indigo-900/50 p-4 rounded-xl mb-6 border border-indigo-500/30 text-center animate-fade-in">
