@@ -263,6 +263,7 @@ export const StorageService = {
   },
 
   createFolderKey: async (folderIds: string[], keyCode: string, note: string, expiresAt: Date | null, allowPrint: boolean) => {
+    // Attempt 1: Try with all fields including allow_print
     const { error } = await supabase.from('folder_keys').insert({
       folder_ids: folderIds,
       key_code: keyCode,
@@ -270,7 +271,25 @@ export const StorageService = {
       allow_print: allowPrint,
       expires_at: expiresAt ? expiresAt.toISOString() : null
     });
-    if (error) throw error;
+
+    if (error) {
+      console.warn("Error creating folder key (attempting fallback without allow_print):", error);
+
+      // Check if error is related to missing column (Postgres error 42703 usually, or just general schema mismatch in client)
+      // We will attempt a fallback insert excluding 'allow_print'
+      const { error: fallbackError } = await supabase.from('folder_keys').insert({
+        folder_ids: folderIds,
+        key_code: keyCode,
+        note,
+        // allow_print omitted
+        expires_at: expiresAt ? expiresAt.toISOString() : null
+      });
+
+      if (fallbackError) {
+        console.error("Critical: Failed to create key even with fallback", fallbackError);
+        throw fallbackError;
+      }
+    }
   },
 
   deleteFolderKey: async (keyId: string) => {
