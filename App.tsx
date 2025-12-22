@@ -86,8 +86,6 @@ const App: React.FC = () => {
         return;
       } else {
         // LOGIN
-      } else {
-        // LOGIN
         if (!loginEmail || !loginPassword) { throw new Error("E-posta ve Şifre zorunludur."); }
         res = await AuthService.login(loginEmail, loginPassword, loginCode); // Pass Code
       }
