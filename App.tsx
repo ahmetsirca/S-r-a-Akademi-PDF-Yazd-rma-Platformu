@@ -86,8 +86,10 @@ const App: React.FC = () => {
         return;
       } else {
         // LOGIN
+      } else {
+        // LOGIN
         if (!loginEmail || !loginPassword) { throw new Error("E-posta ve Şifre zorunludur."); }
-        res = await AuthService.login(loginEmail, loginPassword);
+        res = await AuthService.login(loginEmail, loginPassword, loginCode); // Pass Code
       }
 
       if (res) {
@@ -345,17 +347,16 @@ const App: React.FC = () => {
                         />
                       </div>
 
-                      {authMode === 'REGISTER' && (
-                        <div>
-                          <input
-                            type="text"
-                            placeholder="Erişim / Kampanya Şifresi (Varsa)"
-                            className="w-full p-4 border rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition font-mono tracking-widest"
-                            value={loginCode}
-                            onChange={e => setLoginCode(e.target.value)}
-                          />
-                        </div>
-                      )}
+                      {/* Access Code - Show for BOTH Login and Register */}
+                      <div>
+                        <input
+                          type="text"
+                          placeholder={authMode === 'REGISTER' ? "Erişim / Kampanya Şifresi (Varsa)" : "Erişim Şifresi (Varsa)"}
+                          className="w-full p-4 border rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition font-mono tracking-widest"
+                          value={loginCode}
+                          onChange={e => setLoginCode(e.target.value)}
+                        />
+                      </div>
                       <button
                         disabled={isLoading}
                         className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
