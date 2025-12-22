@@ -297,15 +297,11 @@ const App: React.FC = () => {
                     <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
                       <button
                         type="button"
-                      <button
-                        type="button"
                         onClick={() => { setAuthMode('LOGIN'); setLoginName(''); setLoginEmail(''); setLoginPassword(''); setLoginCode(''); }}
                         className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${authMode === 'LOGIN' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                       >
                         Giriş Yap
                       </button>
-                      <button
-                        type="button"
                       <button
                         type="button"
                         onClick={() => { setAuthMode('REGISTER'); setLoginName(''); setLoginEmail(''); setLoginPassword(''); setLoginCode(''); }}
