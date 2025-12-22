@@ -205,7 +205,7 @@ const App: React.FC = () => {
         id: content.id,
         name: content.title,
         collectionId: content.folderId,
-        sourceType: content.type === 'link' ? 'LINK' : 'FILE', // Simplified check
+        sourceType: 'FILE', // We know it's not a link here
         sourceUrl: content.url,
         pdfData: content.url, // For FILE type, viewer attempts to fetch this
         createdAt: Date.now()
