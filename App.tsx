@@ -48,6 +48,7 @@ const App: React.FC = () => {
 
   // Initial Fetch & Auth Check
   useEffect(() => {
+    console.log('App Build Timestamp: 2025-12-23 01:14 - Vercel Fix');
     fetchInitialData();
 
     // Check saved session
