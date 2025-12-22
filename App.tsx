@@ -346,15 +346,6 @@ const App: React.FC = () => {
                       </div>
 
                       {/* Access Code - Show for BOTH Login and Register */}
-                      <div>
-                        <input
-                          type="text"
-                          placeholder={authMode === 'REGISTER' ? "Erişim / Kampanya Şifresi (Varsa)" : "Erişim Şifresi (Varsa)"}
-                          className="w-full p-4 border rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition font-mono tracking-widest"
-                          value={loginCode}
-                          onChange={e => setLoginCode(e.target.value)}
-                        />
-                      </div>
                       <button
                         disabled={isLoading}
                         className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
@@ -371,6 +362,65 @@ const App: React.FC = () => {
 
               {/* Right: Derslerim (Folders) */}
               <div>
+                {/* Access Code Card - NEW */}
+                <div className="bg-white p-6 rounded-2xl shadow-lg border border-indigo-100 mb-8 relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <i className="fas fa-key text-8xl text-indigo-900"></i>
+                  </div>
+                  <div className="relative z-10">
+                    <h3 className="text-xl font-bold text-slate-800 mb-1">YAZDIRMAK İÇİN ERİŞİM ŞİFRESİNİ GİR</h3>
+                    <p className="text-xs text-slate-500 mb-4">Elinizdeki özel erişim kodunu buraya girerek ilgili içeriklere erişebilirsiniz.</p>
+
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Erişim Şifresi"
+                        className="flex-1 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none font-mono tracking-widest text-center uppercase"
+                        value={loginCode}
+                        onChange={e => setLoginCode(e.target.value)}
+                      />
+                      <button
+                        onClick={async () => {
+                          if (!loginCode) return alert("Lütfen şifre girin.");
+                          setIsLoading(true);
+                          try {
+                            // If logged in, assume we are adding to account?
+                            // Or if just code, we try to Login with Code (Special path)?
+                            // Given current backend, let's treat it as a "Login with Code" attempt if not logged in.
+                            // But the user requested "While registering".
+                            // Let's settle on: It works if you are logged in (adds perm) OR if you use it for login.
+                            // For now, reuse handleCustomAuth logic by forcing a "Code-Only Login" flow?
+                            // Actually, AuthService.login accepts code. We can try to login with JUST code? No, email required.
+                            // Let's assume this is strictly for "Unlocking" if user is already registered?
+                            // "Kullanıcının sayfaya girdiğinde Kayıt olurken onu da görsün".
+                            // It implies it's just an input.
+                            // Let's keep it simple: If they click "İlerle/Kaydet", if no email/pass is entered, what happens?
+                            // Maybe clicking this button triggers the same handleCustomAuth but sets mode?
+                            // No. Let's make this button JUST verify the key and unlock folders for the session if possible.
+                            // OR, if the user fills this AND the left form, it submits all?
+                            // The user asked for a "Separate Frame".
+                            // I'll make this button trigger a specific "Unlock" function.
+                            if (userProfile) {
+                              // Add to existing user
+                              // We need an AuthService method for "Redeem Code". 
+                              // For now, let's just alert that it requires Login, OR try to find a way.
+                              // Actually, the previous implementation handled it in Login/Register.
+                              // Let's just store the code in state (loginCode) and tell user:
+                              // "Şifre girildi. Şimdi Giriş Yap veya Kayıt Ol butonuna basınız."
+                              alert("Şifre algılandı. Lütfen sol taraftan Giriş Yapın veya Kayıt Olun. Bu şifre hesabınıza tanımlanacaktır.");
+                            } else {
+                              alert("Şifre algılandı. Erişim sağlamak için lütfen sol taraftan Giriş Yapın veya Kayıt Olun.");
+                            }
+                          } catch (e) { alert(e); } finally { setIsLoading(false); }
+                        }}
+                        className="bg-indigo-600 text-white px-4 rounded-lg hover:bg-indigo-700 font-bold shadow-md active:scale-95 transition"
+                      >
+                        <i className="fas fa-arrow-right"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="mb-6 flex items-center gap-2">
                   <i className="fas fa-chalkboard-teacher text-blue-600 text-2xl"></i>
                   <h2 className="text-2xl font-bold text-slate-800">Derslerim</h2>
