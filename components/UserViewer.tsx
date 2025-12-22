@@ -50,14 +50,15 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   // Init Logic
   useEffect(() => {
     // Check if Google User
-    AuthService.getSession().then(async (sess) => {
-      if (sess) {
-        setUserId(sess.user.id);
-        const perm = await DBService.getUserPermissions(sess.user.id);
+    // Check if Google User
+    const sess = AuthService.loadSession(); // Sync call
+    if (sess) {
+      setUserId(sess.id); // Note: session object IS the profile
+      DBService.getUserPermissions(sess.id).then(perm => {
         setUserPermission(perm);
-        DBService.logActivity(sess.user.id, 'VIEW_FILE', book.id, `Opened ${book.name}`);
-      }
-    });
+      });
+      DBService.logActivity(sess.id, 'VIEW_FILE', book.id, `Opened ${book.name}`);
+    }
   }, [book.id]);
 
   useEffect(() => {

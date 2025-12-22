@@ -199,7 +199,7 @@ const App: React.FC = () => {
         id: content.id,
         name: content.title,
         collectionId: content.folderId,
-        sourceType: content.url.includes('http') || content.type === 'link' ? 'LINK' : 'FILE', // Auto-detect for safety, or we should pass it
+        sourceType: content.type === 'link' ? 'LINK' : 'FILE', // Simplified check
         sourceUrl: content.url,
         pdfData: content.url, // For FILE type, viewer attempts to fetch this
         createdAt: Date.now()
