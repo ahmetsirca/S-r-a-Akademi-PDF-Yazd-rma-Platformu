@@ -12,8 +12,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.vers
 import { DBService } from '../services/db';
 import { AuthService } from '../services/auth';
 
-import { DBService } from '../services/db';
-import { AuthService } from '../services/auth';
+
 
 interface UserViewerProps {
   book: PDFBook;
