@@ -159,7 +159,7 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
       <Page
         pageNumber={pageNumber}
         width={width}
-        // scale={scale} // Removed scale prop here to let width drive the sizing completely, as we manage scale via width prop in UserViewer
+        scale={scale} // Restored scale prop to ensure correct internal calculations
         renderAnnotationLayer={false}
         renderTextLayer={true}
         onLoadSuccess={handlePageLoadSuccess}
@@ -272,9 +272,13 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     return () => { observer.disconnect(); window.removeEventListener('resize', updateWidth); }
   }, []);
 
-  const handlePageLoad = (page: number, height: number) => {
-    setPageHeights(prev => ({ ...prev, [page]: height }));
-  };
+  /* Fix: Use callback to prevent infinite render loop */
+  const handlePageLoad = React.useCallback((page: number, height: number) => {
+    setPageHeights(prev => {
+      if (prev[page] === height) return prev; // No change, no re-render
+      return { ...prev, [page]: height };
+    });
+  }, []);
 
   // PDF Loading
   useEffect(() => {
