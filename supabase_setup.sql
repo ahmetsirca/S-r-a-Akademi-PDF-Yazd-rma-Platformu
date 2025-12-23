@@ -19,6 +19,7 @@ create table user_permissions (
   folder_ids text[] default '{}', -- Array of Folder UUIDs
   allowed_file_ids text[] default '{}', -- NEW: Array of specific File UUIDs
   can_print boolean default false,
+  print_limits jsonb default '{}', -- NEW: File specific print limits { "file_id": count }
   expires_at timestamp with time zone,
   created_at timestamp with time zone default timezone('utc'::text, now())
 );

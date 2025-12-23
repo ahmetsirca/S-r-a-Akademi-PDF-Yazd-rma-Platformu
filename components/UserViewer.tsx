@@ -393,9 +393,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     if (!canPrint) { alert(limitMessage || "Yazdırma izniniz yok."); return; }
 
     if (limitMessage && !confirm(`${limitMessage} Yazdırmak istiyor musunuz?`)) return;
-    else if (currentKey) { canPrint = (currentKey.printLimit > currentKey.printCount); }
 
-    if (!canPrint) { alert("Yazdırma izniniz yok."); return; }
 
     setIsPrinting(true);
     const iframe = document.createElement('iframe');
