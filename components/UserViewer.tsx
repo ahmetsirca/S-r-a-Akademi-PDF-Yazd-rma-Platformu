@@ -474,9 +474,9 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
             key={pdfUrl} // Force remount if URL changes
             file={pdfUrl}
             options={{
-              cMapUrl: 'https://unpkg.com/pdfjs-dist@4.4.168/cmaps/',
+              cMapUrl: '/cmaps/',
               cMapPacked: true,
-              standardFontDataUrl: 'https://unpkg.com/pdfjs-dist@4.4.168/standard_fonts/'
+              standardFontDataUrl: '/standard_fonts/'
             }}
             onLoadSuccess={onDocumentLoadSuccess}
             onLoadError={(err) => {
