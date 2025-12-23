@@ -7,7 +7,9 @@ import 'react-pdf/dist/esm/Page/TextLayer.css';
 // import '../index.css'; // Removed: Tailwind is loaded via CDN
 
 // Set worker source - Use local file with absolute path for safety
-pdfjs.GlobalWorkerOptions.workerSrc = new URL('/pdf.worker.min.mjs', window.location.origin).toString();
+// Set worker source - Use Vite's explicit URL import for perfect pathing
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 import { DBService } from '../services/db';
 import { AuthService } from '../services/auth';
