@@ -44,6 +44,7 @@ export interface FolderContent {
 export interface FolderKey {
   id: string;
   folderIds: string[]; // Array of UUIDs
+  allowedFileIds?: string[]; // New: Specific files
   keyCode: string;
   note?: string;
   allowPrint: boolean;
@@ -65,6 +66,7 @@ export interface UserPermission {
   id: string;
   userId: string;
   folderIds: string[]; // List of folder UUIDs user can access
+  allowedFileIds: string[]; // List of file UUIDs
   canPrint: boolean;
   expiresAt: string | null; // ISO Date string
 }

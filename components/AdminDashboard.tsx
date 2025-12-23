@@ -33,6 +33,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [folderContents, setFolderContents] = useState<import('../types').FolderContent[]>([]);
   const [folderKeys, setFolderKeys] = useState<import('../types').FolderKey[]>([]);
+  const [allFiles, setAllFiles] = useState<import('../types').FolderContent[]>([]); // NEW
 
   // Folder inputs
   const [newFolderTitle, setNewFolderTitle] = useState('');
@@ -45,6 +46,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [newFolderKey, setNewFolderKey] = useState('');
   const [newFolderKeyNote, setNewFolderKeyNote] = useState('');
   const [selectedFolderIdsForKey, setSelectedFolderIdsForKey] = useState<string[]>([]);
+  const [selectedFileIdsForKey, setSelectedFileIdsForKey] = useState<string[]>([]); // NEW
   const [keyExpiresAt, setKeyExpiresAt] = useState('');
   const [allowPrint, setAllowPrint] = useState(false);
 
@@ -56,6 +58,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
   // Permission Inputs
   const [permFolderIds, setPermFolderIds] = useState<string[]>([]);
+  const [permFileIds, setPermFileIds] = useState<string[]>([]); // NEW
   const [permCanPrint, setPermCanPrint] = useState(false);
   const [permExpiresAt, setPermExpiresAt] = useState('');
 
@@ -85,6 +88,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     // Load New Folder Data
     const foldersData = await StorageService.getFolders();
     setFolders(foldersData);
+    setAllFiles(await StorageService.getAllFiles()); // NEW
 
     // If a folder is active, refresh its content
     if (activeFolderId) {
@@ -107,10 +111,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
     if (perms) {
       setPermFolderIds(perms.folderIds);
+      setPermFileIds(perms.allowedFileIds); // NEW
       setPermCanPrint(perms.canPrint);
       setPermExpiresAt(perms.expiresAt ? perms.expiresAt.slice(0, 16) : ''); // Format for datetime-local
     } else {
       setPermFolderIds([]);
+      setPermFileIds([]); // NEW
       setPermCanPrint(false);
       setPermExpiresAt('');
     }
@@ -123,6 +129,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       await import('../services/db').then(m => m.DBService.updateUserPermission(
         selectedUser.id,
         permFolderIds,
+        permFileIds, // NEW
         permCanPrint,
         permExpiresAt ? new Date(permExpiresAt).toISOString() : null
       ));
@@ -301,19 +308,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
   const handleCreateFolderKey = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedFolderIdsForKey.length === 0 || !newFolderKey) {
-      alert("Lütfen en az bir klasör ve şifre girin.");
+    if ((selectedFolderIdsForKey.length === 0 && selectedFileIdsForKey.length === 0) || !newFolderKey) {
+      alert("Lütfen en az bir klasör/dosya ve şifre girin.");
       return;
     }
     try {
       await StorageService.createFolderKey(
         selectedFolderIdsForKey,
+        selectedFileIdsForKey, // NEW
         newFolderKey.trim(),
         newFolderKeyNote,
         keyExpiresAt ? new Date(keyExpiresAt) : null,
         allowPrint
       );
-      setNewFolderKey(''); setNewFolderKeyNote(''); setKeyExpiresAt(''); setSelectedFolderIdsForKey([]); setAllowPrint(false);
+      setNewFolderKey(''); setNewFolderKeyNote(''); setKeyExpiresAt(''); setSelectedFolderIdsForKey([]); setSelectedFileIdsForKey([]); setAllowPrint(false);
       setFolderKeys(await StorageService.getFolderKeys());
       alert('Şifre oluşturuldu.');
     } catch (e: any) {
@@ -756,6 +764,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                         </label>
                       ))}
                       {folders.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Hiç klasör yok.</p>}
+                    </div>
+
+                    <label className="text-xs font-bold text-slate-500 block mb-2 mt-4">Erişilebilecek Özel Dosyalar</label>
+                    <div className="max-h-48 overflow-y-auto border rounded bg-white p-2 space-y-1">
+                      {allFiles.map(f => (
+                        <label key={f.id} className="flex items-center gap-2 p-1 hover:bg-slate-50 cursor-pointer text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selectedFileIdsForKey.includes(f.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedFileIdsForKey(prev => [...prev, f.id]);
+                              else setSelectedFileIdsForKey(prev => prev.filter(id => id !== f.id));
+                            }}
+                            className="rounded text-green-600"
+                          />
+                          <i className={`fas ${f.type === 'pdf' ? 'fa-file-pdf text-red-500' : 'fa-link text-blue-500'}`}></i>
+                          {f.title}
+                        </label>
+                      ))}
+                      {allFiles.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Hiç dosya yok.</p>}
                     </div>
                     <div className="mt-4">
                       <button className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 font-bold shadow-md shadow-blue-200">Şifre Oluştur</button>

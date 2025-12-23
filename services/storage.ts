@@ -197,6 +197,18 @@ export const StorageService = {
     }));
   },
 
+  getAllFiles: async (): Promise<import('../types').FolderContent[]> => {
+    const { data } = await supabase.from('folder_content').select('*');
+    return (data || []).map((c: any) => ({
+      id: c.id,
+      folderId: c.folder_id,
+      type: c.type,
+      title: c.title,
+      url: c.url,
+      createdAt: new Date(c.created_at).getTime()
+    }));
+  },
+
   addFolderItem: async (folderId: string, type: 'pdf' | 'link', title: string, fileDataOrUrl: string) => {
     let finalUrl = fileDataOrUrl;
 
@@ -254,6 +266,7 @@ export const StorageService = {
     return (data || []).map((k: any) => ({
       id: k.id,
       folderIds: k.folder_ids || [],
+      allowedFileIds: k.allowed_file_ids || [], // NEW
       keyCode: k.key_code,
       note: k.note,
       allowPrint: k.allow_print === true,
@@ -262,10 +275,11 @@ export const StorageService = {
     }));
   },
 
-  createFolderKey: async (folderIds: string[], keyCode: string, note: string, expiresAt: Date | null, allowPrint: boolean) => {
+  createFolderKey: async (folderIds: string[], allowedFileIds: string[], keyCode: string, note: string, expiresAt: Date | null, allowPrint: boolean) => {
     // Attempt 1: Try with all fields including allow_print
     const { error } = await supabase.from('folder_keys').insert({
       folder_ids: folderIds,
+      allowed_file_ids: allowedFileIds, // NEW
       key_code: keyCode,
       note,
       allow_print: allowPrint,

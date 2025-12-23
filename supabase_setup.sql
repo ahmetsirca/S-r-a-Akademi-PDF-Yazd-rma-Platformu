@@ -17,6 +17,7 @@ create table user_permissions (
   id uuid default uuid_generate_v4() primary key,
   user_id uuid references profiles(id) on delete cascade not null,
   folder_ids text[] default '{}', -- Array of Folder UUIDs
+  allowed_file_ids text[] default '{}', -- NEW: Array of specific File UUIDs
   can_print boolean default false,
   expires_at timestamp with time zone,
   created_at timestamp with time zone default timezone('utc'::text, now())
@@ -48,6 +49,7 @@ create table folder_keys (
   id uuid default uuid_generate_v4() primary key,
   key_code text unique not null,
   folder_ids text[] default '{}',
+  allowed_file_ids text[] default '{}', -- NEW: Keys can now open specific files too
   note text,
   allow_print boolean default false,
   expires_at timestamp with time zone,

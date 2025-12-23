@@ -35,6 +35,7 @@ const App: React.FC = () => {
   const [folderKeyInput, setFolderKeyInput] = useState('');
   const [navigationStack, setNavigationStack] = useState<import('./types').Folder[]>([]);
   const [unlockedFolderIds, setUnlockedFolderIds] = useState<string[]>([]);
+  const [unlockedFileIds, setUnlockedFileIds] = useState<string[]>([]); // NEW
   const [currentFolderKey, setCurrentFolderKey] = useState<import('./types').FolderKey | null>(null);
 
   // Viewer State
@@ -62,6 +63,9 @@ const App: React.FC = () => {
             setSession({ user: { id: res.profile.id } } as any);
             setUserProfile(res.profile);
             setIsDeviceVerified(res.isDeviceApproved);
+            // Permissions
+            setUnlockedFolderIds(res.unlockedFolders || []);
+            setUnlockedFileIds(res.unlockedFiles || []); // NEW
             DBService.getUserPermissions(res.profile.id).then(setUserPermission);
           } else {
             AuthService.logout(savedUser.id);
@@ -110,7 +114,13 @@ const App: React.FC = () => {
         } else {
           // No folders assigned yet. Still allow login but show root.
           setUnlockedFolderIds([]);
-          // alert("Giriş başarılı. Henüz atanmış klasörünüz yok.");
+        }
+
+        if (res.unlockedFiles && res.unlockedFiles.length > 0) {
+          setUnlockedFileIds(res.unlockedFiles);
+          // If only files, maybe redirect to Virtual Library? For now, stay on root.
+        } else {
+          setUnlockedFileIds([]);
         }
 
         DBService.getUserPermissions(res.profile.id).then(setUserPermission);
@@ -407,7 +417,10 @@ const App: React.FC = () => {
                               // But visually, the user can just click folders.
                               // Ideally we should reload the 'unlockedFolderIds' state
                               const sess = await AuthService.checkPermissionAccess(userProfile.fullName, userProfile.email);
-                              if (sess) setUnlockedFolderIds(sess.unlockedFolders);
+                              if (sess) {
+                                setUnlockedFolderIds(sess.unlockedFolders);
+                                setUnlockedFileIds(sess.unlockedFiles); // NEW
+                              }
 
                             } else {
                               // Not Logged In -> Just alert
@@ -466,17 +479,25 @@ const App: React.FC = () => {
                       </div>
                     ))}
 
-                    {/* Render Virtual 'Legacy Library' Folder if User has unlocked individual books */}
-                    {unlockedFolderIds.some((id: string) => id.startsWith('BOOK:')) && (
+                    {/* Render Virtual 'Legacy Library' Folder if User has unlocked individual books or files */}
+                    {(unlockedFolderIds.some((id: string) => id.startsWith('BOOK:')) || unlockedFileIds.length > 0) && (
                       <div
                         onClick={async () => {
-                          // 1. Identify unlocked book IDs
+                          // 1. Identify unlocked book IDs (Legacy)
                           const bookIds = unlockedFolderIds.filter((id: string) => id.startsWith('BOOK:')).map((id: string) => id.replace('BOOK:', ''));
-                          // 2. Fetch ALL books (Legacy) - In a real app we might want to batch fetch, but here getBooks is okay.
+
+                          // 2. Fetch ALL books (Legacy)
                           const allBooks = await StorageService.getBooks();
                           const unlockedBooks = allBooks.filter(b => bookIds.includes(b.id));
 
-                          // 3. Create a Virtual Folder Object
+                          // 3. Fetch ALL Files (New System)
+                          let unlockedFilesList: import('./types').FolderContent[] = [];
+                          if (unlockedFileIds.length > 0) {
+                            const allFiles = await StorageService.getAllFiles();
+                            unlockedFilesList = allFiles.filter(f => unlockedFileIds.includes(f.id));
+                          }
+
+                          // 4. Create a Virtual Folder Object
                           const virtualFolder: import('./types').Folder = {
                             id: 'VIRTUAL_LIBRARY',
                             parentId: null,
@@ -485,18 +506,21 @@ const App: React.FC = () => {
                             createdAt: Date.now()
                           };
 
-                          // 4. Navigate
+                          // 5. Navigate
                           setNavigationStack(prev => [...prev, virtualFolder]);
 
-                          // 5. Convert Books to FolderContent
-                          const virtualContent: import('./types').FolderContent[] = unlockedBooks.map(b => ({
-                            id: b.id,
-                            folderId: 'VIRTUAL_LIBRARY',
-                            type: 'pdf', // Legacy books are PDFs
-                            title: b.name,
-                            url: b.sourceUrl || '',
-                            createdAt: b.createdAt
-                          }));
+                          // 6. Convert Books to FolderContent & Merge
+                          const virtualContent: import('./types').FolderContent[] = [
+                            ...unlockedBooks.map(b => ({
+                              id: b.id,
+                              folderId: 'VIRTUAL_LIBRARY',
+                              type: 'pdf' as const, // Legacy books are PDFs
+                              title: b.name,
+                              url: b.sourceUrl || '',
+                              createdAt: b.createdAt
+                            })),
+                            ...unlockedFilesList
+                          ];
 
                           setFolderContent(virtualContent);
                           setView('USER_FOLDER_VIEW');
@@ -510,7 +534,7 @@ const App: React.FC = () => {
                             </div>
                             <div>
                               <h3 className="font-bold text-lg text-slate-800">Bireysel Kütüphane</h3>
-                              <p className="text-xs text-slate-500">Erişim kodlu tekil kitaplarınız</p>
+                              <p className="text-xs text-slate-500">Özel dosyalarınız ve erişim kodlu içerikler</p>
                             </div>
                           </div>
                           <i className="fas fa-chevron-right text-slate-300 "></i>

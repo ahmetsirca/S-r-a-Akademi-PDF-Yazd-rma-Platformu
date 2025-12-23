@@ -14,6 +14,7 @@ export const AuthService = {
 
         // 2. Validate Code (If provided)
         let unlockedFolders: string[] = [];
+        let unlockedFiles: string[] = []; // NEW
         if (code) {
             const { data: folderKeys } = await supabase.from('folder_keys').select('*').eq('key_code', code);
             const folderKey = folderKeys && folderKeys.length > 0 ? folderKeys[0] : null;
@@ -23,6 +24,10 @@ export const AuthService = {
                     throw new Error("Girdiğiniz kodun süresi dolmuş.");
                 }
                 unlockedFolders = folderKey.folder_ids || [];
+                unlockedFiles = folderKey.allowed_file_ids || []; // NEW
+                // We should also capture allowed files here, but the types need to pass down to insertion below
+                // Since this function returns UserProfile, we rely on the insertion logic below to save permissions.
+                // We need a variable for unlockedFiles
             } else {
                 // For legacy keys or invalid code, we might want to throw error or just ignore?
                 // User requested "Access Password" which implies validity check.
@@ -42,10 +47,11 @@ export const AuthService = {
         if (error) throw error;
 
         // 4. Assign Permissions (If code was valid)
-        if (unlockedFolders.length > 0) {
+        if (unlockedFolders.length > 0 || unlockedFiles.length > 0) {
             await supabase.from('user_permissions').insert({
                 user_id: newUser.id,
                 folder_ids: unlockedFolders,
+                allowed_file_ids: unlockedFiles, // NEW
                 can_print: false, // Default to false unless key specifies print? 
                 // The folder_keys table has allow_print. Let's use it.
                 // We need to re-fetch key to get allow_print or store it above
@@ -78,6 +84,7 @@ export const AuthService = {
         const folderKey = folderKeys && folderKeys.length > 0 ? folderKeys[0] : null;
 
         let itemsToUnlock: string[] = [];
+        let filesToUnlock: string[] = []; // NEW
         let enablePrint = false;
 
         if (folderKey) {
@@ -85,6 +92,7 @@ export const AuthService = {
                 throw new Error("Girdiğiniz kodun süresi dolmuş.");
             }
             itemsToUnlock = folderKey.folder_ids || [];
+            filesToUnlock = folderKey.allowed_file_ids || []; // NEW
             enablePrint = folderKey.allow_print;
         } else {
             // 2. Validate Legacy Key (Old System)
@@ -104,26 +112,31 @@ export const AuthService = {
         }
 
         // 3. Grant Permissions
-        if (itemsToUnlock.length > 0) {
+        if (itemsToUnlock.length > 0 || filesToUnlock.length > 0) {
             // Check existing permissions
             const { data: existingPerms } = await supabase.from('user_permissions').select('*').eq('user_id', userId).single();
             let finalFolders = itemsToUnlock;
+            let finalFiles = filesToUnlock;
             let canPrint = enablePrint;
 
             if (existingPerms) {
                 // Merge folders (and book IDs)
                 finalFolders = [...new Set([...(existingPerms.folder_ids || []), ...itemsToUnlock])];
+                // Merge files
+                finalFiles = [...new Set([...(existingPerms.allowed_file_ids || []), ...filesToUnlock])];
                 // Merge print (if either allows, allow it)
                 canPrint = existingPerms.can_print || enablePrint;
 
                 await supabase.from('user_permissions').update({
                     folder_ids: finalFolders,
+                    allowed_file_ids: finalFiles,
                     can_print: canPrint
                 }).eq('id', existingPerms.id);
             } else {
                 await supabase.from('user_permissions').insert({
                     user_id: userId,
                     folder_ids: finalFolders,
+                    allowed_file_ids: finalFiles,
                     can_print: canPrint
                 });
             }
@@ -136,7 +149,7 @@ export const AuthService = {
     /**
      * LOGIN: Verify Email + Password
      */
-    async login(email: string, password: string): Promise<{ profile: UserProfile, unlockedFolders: string[], isDeviceApproved: boolean } | null> {
+    async login(email: string, password: string): Promise<{ profile: UserProfile, unlockedFolders: string[], unlockedFiles: string[], isDeviceApproved: boolean } | null> {
         // 1. Find user
         const { data: user } = await supabase.from('profiles').select('*').eq('email', email).single();
         if (!user) throw new Error("Kullanıcı bulunamadı.");
@@ -152,13 +165,16 @@ export const AuthService = {
 
         // 4. Get Permissions
         let unlockedFolders: string[] = [];
+        let unlockedFiles: string[] = []; // NEW
         const { data: perms } = await supabase.from('user_permissions').select('*').eq('user_id', user.id).single();
         if (perms) {
             if (perms.expires_at && new Date(perms.expires_at) < new Date()) {
                 // Expired
                 unlockedFolders = [];
+                unlockedFiles = [];
             } else {
                 unlockedFolders = perms.folder_ids || [];
+                unlockedFiles = perms.allowed_file_ids || []; // NEW
             }
         }
 
@@ -204,6 +220,7 @@ export const AuthService = {
         return {
             profile,
             unlockedFolders,
+            unlockedFiles, // NEW
             isDeviceApproved
         };
     },
@@ -218,7 +235,7 @@ export const AuthService = {
         return saved ? JSON.parse(saved) : null;
     },
 
-    async checkPermissionAccess(fullName: string, email: string): Promise<{ profile: UserProfile, unlockedFolders: string[], isDeviceApproved: boolean } | null> {
+    async checkPermissionAccess(fullName: string, email: string): Promise<{ profile: UserProfile, unlockedFolders: string[], unlockedFiles: string[], isDeviceApproved: boolean } | null> {
         // Fallback or Refresh logic can reuse login internal logic if needed
         // For now, simpler to just fetch profile if session exists
         const { data: user } = await supabase.from('profiles').select('*').eq('email', email).single();
@@ -231,10 +248,12 @@ export const AuthService = {
 
         // Re-implementing simplified re-check:
         let unlockedFolders: string[] = [];
+        let unlockedFiles: string[] = []; // NEW
         const { data: perms } = await supabase.from('user_permissions').select('*').eq('user_id', user.id).single();
         if (perms) {
             if (!perms.expires_at || new Date(perms.expires_at) > new Date()) {
                 unlockedFolders = perms.folder_ids || [];
+                unlockedFiles = perms.allowed_file_ids || []; // NEW
             }
         }
 
@@ -258,6 +277,7 @@ export const AuthService = {
                 lastSeen: user.last_seen
             },
             unlockedFolders,
+            unlockedFiles, // NEW
             isDeviceApproved: existingDevice?.is_approved || false
         };
     },

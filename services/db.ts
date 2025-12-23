@@ -23,17 +23,19 @@ export const DBService = {
       id: data.id,
       userId: data.user_id,
       folderIds: data.folder_ids || [],
+      allowedFileIds: data.allowed_file_ids || [], // NEW
       canPrint: data.can_print,
       expiresAt: data.expires_at
     };
   },
 
-  async updateUserPermission(userId: string, folderIds: string[], canPrint: boolean, expiresAt: string | null) {
+  async updateUserPermission(userId: string, folderIds: string[], allowedFileIds: string[], canPrint: boolean, expiresAt: string | null) {
     const { data: existing } = await supabase.from('user_permissions').select('id').eq('user_id', userId).single();
 
     if (existing) {
       return await supabase.from('user_permissions').update({
         folder_ids: folderIds,
+        allowed_file_ids: allowedFileIds,
         can_print: canPrint,
         expires_at: expiresAt
       }).eq('user_id', userId);
@@ -41,6 +43,7 @@ export const DBService = {
       return await supabase.from('user_permissions').insert({
         user_id: userId,
         folder_ids: folderIds,
+        allowed_file_ids: allowedFileIds,
         can_print: canPrint,
         expires_at: expiresAt
       });

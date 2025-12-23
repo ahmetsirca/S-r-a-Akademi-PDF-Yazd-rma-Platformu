@@ -477,12 +477,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
             <button onClick={() => handleZoom(0.2)} className="p-2 text-white"><i className="fas fa-plus"></i></button>
           </div>
 
-          {/* Mobile Tool Toggle */}
-          <div className="md:hidden flex bg-slate-700 rounded-lg p-1">
-            <button onClick={() => setToolMode('CURSOR')} className={`p-2 rounded ${toolMode === 'CURSOR' ? 'bg-slate-500 text-white' : 'text-slate-400'}`}><i className="fas fa-mouse-pointer"></i></button>
-            <button onClick={() => setToolMode('PEN')} className={`p-2 rounded ${toolMode === 'PEN' ? 'bg-slate-500 text-white' : 'text-slate-400'}`}><i className="fas fa-pen"></i></button>
-            <button onClick={() => setToolMode('HIGHLIGHTER')} className={`p-2 rounded ${toolMode === 'HIGHLIGHTER' ? 'bg-slate-500 text-white' : 'text-slate-400'}`}><i className="fas fa-highlighter"></i></button>
-          </div>
+
 
           <button onClick={handlePrint} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 ml-2">
             <i className="fas fa-print"></i>
@@ -497,9 +492,17 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         {pdfUrl ? (
           <Document
             file={pdfUrl}
+            options={{
+              cMapUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
+              cMapPacked: true,
+            }}
             onLoadSuccess={onDocumentLoadSuccess}
-            onLoadError={(err) => { console.error("PDF Load Error:", err); alert("PDF yüklenemedi: " + err.message); }}
-            loading={<div className="text-white">Yükleniyor...</div>}
+            onLoadError={(err) => {
+              console.error("PDF Load Error:", err);
+              alert("PDF görüntülenemiyor. Tarayıcınız desteklemiyor olabilir veya dosya bozuk. Hata: " + err.message);
+            }}
+            loading={<div className="text-white text-center mt-20"><i className="fas fa-spinner fa-spin text-4xl mb-4"></i><p>Dosya Hazırlanıyor...</p></div>}
+            error={<div className="text-red-400 text-center mt-20 p-8">PDF Yüklenemedi. <br /> Lütfen sayfayı yenileyin veya başka bir tarayıcı deneyin.</div>}
           >
             {numPages && Array.from(new Array(numPages)).map((_, index) => {
               const pageNum = index + 1;
@@ -533,21 +536,75 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         ) : <div className="text-white">Dosya hazırlanıyor...</div>}
       </div>
 
-      {/* Floating Page Indicator */}
-      <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-slate-800/90 text-white px-4 py-2 rounded-full shadow-xl pointer-events-none z-50">
-        {currentPage} / {numPages || '-'}
-      </div>
+      {/* Mobile Bottom Toolbar (Unified) */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 p-2 z-[70] pb-6">
+        <div className="flex justify-between items-center px-4">
+          {/* Tools */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setToolMode('CURSOR')}
+              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'CURSOR' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
+            >
+              <i className="fas fa-mouse-pointer text-xl mb-1"></i>
+              <span className="text-[10px]">Seç</span>
+            </button>
+            <button
+              onClick={() => setToolMode('PEN')}
+              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'PEN' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
+            >
+              <i className="fas fa-pen text-xl mb-1"></i>
+              <span className="text-[10px]">Kalem</span>
+            </button>
+            <button
+              onClick={() => setToolMode('HIGHLIGHTER')}
+              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'HIGHLIGHTER' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
+            >
+              <i className="fas fa-highlighter text-xl mb-1"></i>
+              <span className="text-[10px]">Fosforlu</span>
+            </button>
+          </div>
 
-      {/* Mobile Floating Colors (Only when drawing) */}
-      {toolMode !== 'CURSOR' && (
-        <div className="md:hidden fixed bottom-20 left-1/2 transform -translate-x-1/2 flex gap-3 bg-slate-800 p-2 rounded-xl shadow-xl z-50">
-          <button onClick={() => setPenColor('#EF4444')} className={`w-8 h-8 rounded-full bg-red-500 border-2 ${penColor === '#EF4444' ? 'border-white' : 'border-transparent'}`} />
-          <button onClick={() => setPenColor('#3B82F6')} className={`w-8 h-8 rounded-full bg-blue-500 border-2 ${penColor === '#3B82F6' ? 'border-white' : 'border-transparent'}`} />
-          <button onClick={() => setPenColor('#000000')} className={`w-8 h-8 rounded-full bg-black border-2 border-slate-500 ${penColor === '#000000' ? 'border-white' : 'border-transparent'}`} />
-          <div className="w-px h-8 bg-slate-600 mx-1"></div>
-          <button onClick={undoAnnotation} className="text-slate-300 p-1"><i className="fas fa-undo"></i></button>
+          {/* Actions */}
+          <div className="flex gap-2">
+            <button onClick={undoAnnotation} className="p-3 text-slate-300 active:text-white"><i className="fas fa-undo text-lg"></i></button>
+            <div className="w-px h-8 bg-slate-700 mx-1 self-center"></div>
+            {/* Active Color Preview */}
+            <div className="relative group">
+              <button
+                className="w-10 h-10 rounded-full border-2 border-white shadow-sm flex items-center justify-center"
+                style={{ backgroundColor: penColor }}
+                onClick={() => {
+                  // Toggle a small popover or just cycle? Let's Simple Cycle for simplicity first, or small popover.
+                  // Let's use a small localized popover logic or stick to the bar.
+                  // Actually, let's show colors IN the bar if drawing mode is active.
+                }}
+              >
+              </button>
+
+              {/* Mini Color Picker Popover (Only shows when clicking or hovering on desktop, but for mobile let's put it side-by-side if space allows, or popover) */}
+              <div className="hidden group-focus-within:flex absolute bottom-full mb-2 right-0 bg-slate-800 p-2 rounded-xl shadow-xl flex-col gap-2 border border-slate-600">
+                {['#EF4444', '#3B82F6', '#000000', '#10B981'].map(c => (
+                  <button key={c} onClick={() => setPenColor(c)} className="w-8 h-8 rounded-full border border-slate-500" style={{ backgroundColor: c }} />
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
-      )}
+
+        {/* Expanded Colors (Visible if Pen/Highlighter Active) */}
+        {(toolMode === 'PEN' || toolMode === 'HIGHLIGHTER') && (
+          <div className="flex justify-center gap-4 mt-3 pb-2 border-t border-slate-800 pt-2">
+            {['#EF4444', '#3B82F6', '#000000', '#10B981', '#F59E0B'].map(c => (
+              <button
+                key={c}
+                onClick={() => setPenColor(c)}
+                className={`w-8 h-8 rounded-full shadow-lg transform transition ${penColor === c ? 'scale-125 border-2 border-white' : 'scale-100 border border-transparent'}`}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Success Modal */}
       {showSuccessModal && (
