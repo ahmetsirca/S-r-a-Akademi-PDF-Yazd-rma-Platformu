@@ -106,6 +106,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     setUsers(await import('../services/db').then(m => m.DBService.getAllUsers()));
   }
 
+
   const handleOpenPermModal = async (user: import('../types').UserProfile) => {
     setSelectedUser(user);
     // Fetch existing perms
@@ -113,13 +114,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
     if (perms) {
       setPermFolderIds(perms.folderIds);
-      setPermFileIds(perms.allowedFileIds); // NEW
+      setPermFileIds(perms.allowedFileIds);
       setPermCanPrint(perms.canPrint);
+      setPermPrintLimits(perms.printLimits || {});
       setPermExpiresAt(perms.expiresAt ? perms.expiresAt.slice(0, 16) : ''); // Format for datetime-local
     } else {
       setPermFolderIds([]);
-      setPermFileIds([]); // NEW
+      setPermFileIds([]);
       setPermCanPrint(false);
+      setPermPrintLimits({});
       setPermExpiresAt('');
     }
     setPermModalOpen(true);
@@ -131,9 +134,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       await import('../services/db').then(m => m.DBService.updateUserPermission(
         selectedUser.id,
         permFolderIds,
-        permFileIds, // NEW
+        permFileIds,
         permCanPrint,
-        permExpiresAt ? new Date(permExpiresAt).toISOString() : null
+        permExpiresAt ? new Date(permExpiresAt).toISOString() : null,
+        permPrintLimits
       ));
       setPermModalOpen(false);
       alert("İzinler güncellendi.");
