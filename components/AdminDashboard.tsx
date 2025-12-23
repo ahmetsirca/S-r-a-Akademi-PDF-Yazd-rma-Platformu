@@ -478,6 +478,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                     ))}
                   </div>
                 </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Erişim İzni Verilecek Özel Dosyalar</label>
+                  <div className="max-h-60 overflow-y-auto border rounded-xl p-3 grid grid-cols-1 md:grid-cols-2 gap-2 bg-slate-50">
+                    {allFiles.map(f => (
+                      <label key={f.id} className={`flex items-center gap-2 p-2 rounded cursor-pointer border transition ${permFileIds.includes(f.id) ? 'bg-green-50 border-green-200' : 'bg-white border-transparent'}`}>
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-green-600 rounded"
+                          checked={permFileIds.includes(f.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) setPermFileIds(prev => [...prev, f.id]);
+                            else setPermFileIds(prev => prev.filter(id => id !== f.id));
+                          }}
+                        />
+                        <i className={`fas ${f.type === 'pdf' ? 'fa-file-pdf text-red-500' : 'fa-link text-blue-500'}`}></i>
+                        <span className="text-sm font-medium text-slate-700 truncate">{f.title}</span>
+                      </label>
+                    ))}
+                    {allFiles.length === 0 && <p className="text-xs text-slate-400 p-2 text-center col-span-2">Sistemde hiç dosya yok.</p>}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-6">
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Erişim Bitiş Tarihi</label>
