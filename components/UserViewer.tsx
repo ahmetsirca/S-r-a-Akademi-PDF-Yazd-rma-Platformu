@@ -6,7 +6,6 @@ import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 // import '../index.css'; // Removed: Tailwind is loaded via CDN
 
-// Set worker source - Use local file with absolute path for safety
 // Set worker source - Use Vite's explicit URL import for perfect pathing
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -207,6 +206,14 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   const [penColor, setPenColor] = useState('#EF4444'); // Red default
 
   const [annotations, setAnnotations] = useState<Record<number, AnnotationPath[]>>({});
+  const [loadError, setLoadError] = useState(false);
+
+  // Memoize options to prevent unnecessary re-renders of Document
+  const options = React.useMemo(() => ({
+    cMapUrl: '/cmaps/',
+    cMapPacked: true,
+    standardFontDataUrl: '/standard_fonts/'
+  }), []);
 
   useEffect(() => {
     console.log('UserViewer MOUNTED');
@@ -472,51 +479,63 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         {!isFocused && <div className="fixed inset-0 z-[100] bg-black/50 text-white flex items-center justify-center text-2xl font-bold">Odaklanın</div>}
 
         {pdfUrl ? (
-          <Document
-            key={pdfUrl} // Force remount if URL changes
-            file={pdfUrl}
-            options={{
-              cMapUrl: '/cmaps/',
-              cMapPacked: true,
-              standardFontDataUrl: '/standard_fonts/'
-            }}
-            onLoadSuccess={onDocumentLoadSuccess}
-            onLoadError={(err) => {
-              console.error("PDF Load Error:", err);
-              alert("PDF görüntülenemiyor. Tarayıcınız desteklemiyor olabilir veya dosya bozuk. Hata: " + err.message);
-            }}
-            loading={<div className="text-white text-center mt-20"><i className="fas fa-spinner fa-spin text-4xl mb-4"></i><p>Dosya Hazırlanıyor...</p></div>}
-            error={<div className="text-red-400 text-center mt-20 p-8">PDF Yüklenemedi. <br /> Lütfen sayfayı yenileyin veya başka bir tarayıcı deneyin.</div>}
-          >
-            {numPages && Array.from(new Array(numPages)).map((_, index) => {
-              const pageNum = index + 1;
-              // Virtualization: Only render pages around the current one
-              const isVisible = Math.abs(pageNum - currentPage) <= 2;
-              const height = pageHeights[pageNum] || estimatedHeight;
+          // Error Fallback: If React-PDF fails, show native Iframe
+          loadError ? (
+            <div className="w-full h-full flex flex-col items-center justify-center p-4">
+              <div className="bg-red-500/10 text-red-400 p-4 rounded-lg mb-4 text-center">
+                <p className="font-bold">Gelişmiş görüntüleyici açılamadı.</p>
+                <p className="text-sm">Standart görüntüleyiciye geçiliyor...</p>
+              </div>
+              <iframe
+                src={pdfUrl}
+                className="w-full h-[80vh] bg-white rounded-lg shadow-xl"
+                title="PDF Viewer"
+              />
+            </div>
+          ) : (
+            <Document
+              key={pdfUrl} // Force remount if URL changes
+              file={pdfUrl}
+              options={options}
+              onLoadSuccess={onDocumentLoadSuccess}
+              onLoadError={(err) => {
+                console.error("PDF Load Error:", err);
+                // Switch to generic iframe fallback instead of just alerting
+                setLoadError(true);
+              }}
+              loading={<div className="text-white text-center mt-20"><i className="fas fa-spinner fa-spin text-4xl mb-4"></i><p>Dosya Hazırlanıyor...</p></div>}
+              error={null} // Handle error manually via state
+            >
+              {numPages && Array.from(new Array(numPages)).map((_, index) => {
+                const pageNum = index + 1;
+                // Virtualization: Only render pages around the current one
+                const isVisible = Math.abs(pageNum - currentPage) <= 2;
+                const height = pageHeights[pageNum] || estimatedHeight;
 
-              return (
-                <div key={`page-wrapper-${pageNum}`} id={`page-${pageNum}`} className="mb-4 transition-all duration-300" style={{ minHeight: height, width: renderedWidth }}>
-                  {isVisible ? (
-                    <SinglePDFPage
-                      pageNumber={pageNum}
-                      scale={scale}
-                      width={renderedWidth}
-                      toolMode={toolMode}
-                      penColor={penColor}
-                      annotations={annotations[pageNum] || []}
-                      onAnnotationAdd={addAnnotation}
-                      onPageLoad={handlePageLoad}
-                      devicePixelRatio={Math.min(window.devicePixelRatio || 1, 2)} // Cap DPI to 2 to prevent mobile canvas crash
-                    />
-                  ) : (
-                    <div className="bg-slate-400/20 rounded-lg animate-pulse flex items-center justify-center text-slate-400 font-bold text-2xl" style={{ height: height, width: renderedWidth }}>
-                      {pageNum}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </Document>
+                return (
+                  <div key={`page-wrapper-${pageNum}`} id={`page-${pageNum}`} className="mb-4 transition-all duration-300" style={{ minHeight: height, width: renderedWidth }}>
+                    {isVisible ? (
+                      <SinglePDFPage
+                        pageNumber={pageNum}
+                        scale={scale}
+                        width={renderedWidth}
+                        toolMode={toolMode}
+                        penColor={penColor}
+                        annotations={annotations[pageNum] || []}
+                        onAnnotationAdd={addAnnotation}
+                        onPageLoad={handlePageLoad}
+                        devicePixelRatio={Math.min(window.devicePixelRatio || 1, 2)} // Cap DPI to 2 to prevent mobile canvas crash
+                      />
+                    ) : (
+                      <div className="bg-slate-400/20 rounded-lg animate-pulse flex items-center justify-center text-slate-400 font-bold text-2xl" style={{ height: height, width: renderedWidth }}>
+                        {pageNum}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </Document>
+          )
         ) : <div className="text-white">Dosya hazırlanıyor...</div>}
       </div>
 
