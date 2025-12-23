@@ -20,12 +20,12 @@ export default defineConfig(({ mode }) => {
       }
     },
     build: {
-      target: 'es2022', // Updated for top-level await support often needed by pdfjs
+      target: 'es2015', // Support older mobile browsers
     },
     optimizeDeps: {
       include: ['pdfjs-dist'], // Explicitly include pdfjs-dist
       esbuildOptions: {
-        target: 'es2022',
+        target: 'es2015',
       },
     }
   };
