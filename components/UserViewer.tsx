@@ -6,8 +6,9 @@ import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 // import '../index.css'; // Removed: Tailwind is loaded via CDN
 
-// Set worker source - using CDN for maximum compatibility across devices
-pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+// Set worker source - Hardcoded version to match package.json exactly
+// This avoids dynamic resolution issues on some CDNs or bundlers
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs`;
 
 import { DBService } from '../services/db';
 import { AuthService } from '../services/auth';
@@ -492,7 +493,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
           <Document
             file={pdfUrl}
             options={{
-              cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
+              cMapUrl: 'https://unpkg.com/pdfjs-dist@4.4.168/cmaps/',
               cMapPacked: true,
             }}
             onLoadSuccess={onDocumentLoadSuccess}
