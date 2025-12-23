@@ -291,22 +291,12 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
   // PDF Loading
   useEffect(() => {
-    const loadContent = async () => {
-      if (book.sourceType === 'FILE' && book.pdfData) {
-        try {
-          const res = await fetch(book.pdfData);
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          setPdfUrl(url);
-        } catch (e) {
-          setPdfUrl(book.pdfData || null);
-        }
-      } else {
-        setPdfUrl(book.sourceUrl || book.pdfData || null);
-      }
-    };
-    loadContent();
-    return () => { if (pdfUrl && book.sourceType === 'FILE') URL.revokeObjectURL(pdfUrl); };
+    if (book.sourceType === 'FILE' && book.pdfData) {
+      // Direct URL is better for caching and memory
+      setPdfUrl(book.pdfData);
+    } else {
+      setPdfUrl(book.sourceUrl || book.pdfData || null);
+    }
   }, [book]);
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
@@ -491,6 +481,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
         {pdfUrl ? (
           <Document
+            key={pdfUrl} // Force remount if URL changes
             file={pdfUrl}
             options={{
               cMapUrl: 'https://unpkg.com/pdfjs-dist@4.4.168/cmaps/',
