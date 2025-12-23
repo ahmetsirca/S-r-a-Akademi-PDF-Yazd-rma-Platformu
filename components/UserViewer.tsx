@@ -380,27 +380,38 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       const globalCanPrint = userPermission.canPrint;
       const fileLimit = userPermission.printLimits?.[book.id];
 
+      // If specific limit exists, it takes precedence
       if (fileLimit !== undefined) {
-        // Specific limit overrides global setting
-        canPrint = fileLimit > 0;
-        if (!canPrint) limitMessage = "Bu dosya için yazdırma limitiniz doldu.";
-        else limitMessage = `Kalan yazdırma hakkınız: ${fileLimit}`;
+        if (fileLimit > 0) {
+          canPrint = true;
+          limitMessage = `Kalan yazdırma hakkınız: ${fileLimit}`;
+        } else {
+          // Explicit block via limit
+          limitMessage = "Bu dosya için yazdırma limitiniz doldu.";
+        }
+      } else if (globalCanPrint) {
+        canPrint = true;
       } else {
-        // No specific limit, use global
-        canPrint = globalCanPrint;
-        if (!canPrint) limitMessage = "Yazdırma izniniz yok.";
+        // If not permitted, set message (but don't block yet, other methods might allow)
+        // limitMessage = "Yazdırma izniniz yok."; 
       }
     }
 
-
-    // 2. Check Legacy Access Key
-    else if (currentKey) {
-      canPrint = (currentKey.printLimit > currentKey.printCount);
-      if (!canPrint) limitMessage = "Anahtar yazdırma limitiniz doldu.";
+    // 2. Check Legacy Access Key (Additive)
+    if (!canPrint && currentKey) {
+      if (currentKey.printLimit > currentKey.printCount) {
+        canPrint = true;
+        limitMessage = ""; // Clear rejection message if allowed
+      } else {
+        limitMessage = "Anahtar yazdırma limitiniz doldu.";
+      }
     }
-    // 3. New Prop Override
-    else if (allowPrint) {
+
+    // 3. New Prop Override (Additive)
+    // This allows Folder Keys or App.tsx calculated permissions to override rejection
+    if (!canPrint && allowPrint) {
       canPrint = true;
+      limitMessage = ""; // Clear rejection message
     }
 
     if (!canPrint) { alert(limitMessage || "Yazdırma izniniz yok."); return; }
