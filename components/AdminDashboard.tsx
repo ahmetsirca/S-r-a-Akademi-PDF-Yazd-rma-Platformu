@@ -175,12 +175,22 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   }, [adminTab]);
 
   // --- LEGACY COLLECTIIONS HANDLERS ---
+
   const handleCreateCollection = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newColName) return;
     await StorageService.saveCollection(newColName);
     setNewColName('');
     await refreshData();
+  };
+
+  const handleDeleteCollection = async (id: string) => {
+    if (confirm('Bu klasörü silmek istediğinize emin misiniz? İçindeki dosyalar silinmeyecek ama erişilemez olabilir.')) {
+      setIsLoading(true);
+      await StorageService.deleteCollection(id);
+      await refreshData();
+      setIsLoading(false);
+    }
   };
 
   const handleUploadBook = async (e: React.FormEvent) => {
@@ -589,7 +599,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               </form>
               <div className="mt-6">
                 <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2">Mevcut Klasörler</h3>
-                <ul className="space-y-2">{collections.map(c => <li key={c.id} className="p-2 bg-slate-50 rounded flex justify-between"><span><i className="fas fa-folder text-blue-500 mr-2"></i>{c.name}</span></li>)}</ul>
+                <ul className="space-y-2">
+                  {collections.map(c => (
+                    <li key={c.id} className="p-2 bg-slate-50 rounded flex justify-between items-center group">
+                      <span><i className="fas fa-folder text-blue-500 mr-2"></i>{c.name}</span>
+                      <button onClick={() => handleDeleteCollection(c.id)} className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition" title="Sil">
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
 
