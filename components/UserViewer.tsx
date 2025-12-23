@@ -377,328 +377,331 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
     // 1. Check Database Permissions (logged in user)
     if (userPermission) {
-      if (!userPermission.canPrint) {
-        canPrint = false;
+      const globalCanPrint = userPermission.canPrint;
+      const fileLimit = userPermission.printLimits?.[book.id];
+
+      if (fileLimit !== undefined) {
+        // Specific limit overrides global setting
+        canPrint = fileLimit > 0;
+        if (!canPrint) limitMessage = "Bu dosya için yazdırma limitiniz doldu.";
+        else limitMessage = `Kalan yazdırma hakkınız: ${fileLimit}`;
       } else {
-        const limit = userPermission.printLimits?.[book.id];
-        if (limit !== undefined) {
-          canPrint = limit > 0;
-          if (!canPrint) limitMessage = "Yazdırma limitiniz doldu.";
-          else limitMessage = `Kalan yazdırma hakkınız: ${limit}`;
-        } else {
-          canPrint = true; // Global permission without limit
-        }
+        // No specific limit, use global
+        canPrint = globalCanPrint;
+        if (!canPrint) limitMessage = "Yazdırma izniniz yok.";
       }
     }
+
+  }
     // 2. Check Legacy Access Key
     else if (currentKey) {
-      canPrint = (currentKey.printLimit > currentKey.printCount);
-      if (!canPrint) limitMessage = "Anahtar yazdırma limitiniz doldu.";
-    }
-    // 3. New Prop Override
-    else if (allowPrint) {
-      canPrint = true;
-    }
+  canPrint = (currentKey.printLimit > currentKey.printCount);
+  if (!canPrint) limitMessage = "Anahtar yazdırma limitiniz doldu.";
+}
+// 3. New Prop Override
+else if (allowPrint) {
+  canPrint = true;
+}
 
-    if (!canPrint) { alert(limitMessage || "Yazdırma izniniz yok."); return; }
+if (!canPrint) { alert(limitMessage || "Yazdırma izniniz yok."); return; }
 
-    if (limitMessage && !confirm(`${limitMessage} Yazdırmak istiyor musunuz?`)) return;
+if (limitMessage && !confirm(`${limitMessage} Yazdırmak istiyor musunuz?`)) return;
 
-    if (!pdfUrl) return;
+if (!pdfUrl) return;
 
-    setIsPrinting(true);
+setIsPrinting(true);
 
-    try {
-      // PROFESSIONAL PRINTING METHOD: Fetch > Blob > Iframe
-      const response = await fetch(pdfUrl);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
+try {
+  // PROFESSIONAL PRINTING METHOD: Fetch > Blob > Iframe
+  const response = await fetch(pdfUrl);
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
 
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = blobUrl;
-      document.body.appendChild(iframe);
+  const iframe = document.createElement('iframe');
+  iframe.style.display = 'none';
+  iframe.src = blobUrl;
+  document.body.appendChild(iframe);
 
-      iframe.onload = () => {
-        // Delay needed for Chrome/Firefox to render Blob URL in iframe before print
-        setTimeout(() => {
-          iframe.contentWindow?.print();
-          setTimeout(() => {
-            document.body.removeChild(iframe);
-            URL.revokeObjectURL(blobUrl);
-            setIsPrinting(false);
-          }, 10000); // 10s wait for print interaction
+  iframe.onload = () => {
+    // Delay needed for Chrome/Firefox to render Blob URL in iframe before print
+    setTimeout(() => {
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+        URL.revokeObjectURL(blobUrl);
+        setIsPrinting(false);
+      }, 10000); // 10s wait for print interaction
 
-          setShowSuccessModal(true);
+      setShowSuccessModal(true);
 
-          if (userPermission && userId) {
-            DBService.decrementPrintLimit(userId, book.id);
-            setUserPermission(prev => {
-              if (!prev || !prev.printLimits) return prev;
-              const current = prev.printLimits[book.id];
-              if (typeof current === 'number') {
-                return { ...prev, printLimits: { ...prev.printLimits, [book.id]: Math.max(0, current - 1) } };
-              }
-              return prev;
-            });
-          } else if (!userPermission && currentKey) {
-            StorageService.updateKeyCount(currentKey.id);
-          } else if (onPrintDecrement) {
-            onPrintDecrement();
+      if (userPermission && userId) {
+        DBService.decrementPrintLimit(userId, book.id);
+        setUserPermission(prev => {
+          if (!prev || !prev.printLimits) return prev;
+          const current = prev.printLimits[book.id];
+          if (typeof current === 'number') {
+            return { ...prev, printLimits: { ...prev.printLimits, [book.id]: Math.max(0, current - 1) } };
           }
+          return prev;
+        });
+      } else if (!userPermission && currentKey) {
+        StorageService.updateKeyCount(currentKey.id);
+      } else if (onPrintDecrement) {
+        onPrintDecrement();
+      }
 
-        }, 500);
-      };
-    } catch (e) {
-      console.error("Print Error:", e);
-      alert("Yazdırma sırasında bir hata oluştu.");
-      setIsPrinting(false);
-    }
+    }, 500);
+  };
+} catch (e) {
+  console.error("Print Error:", e);
+  alert("Yazdırma sırasında bir hata oluştu.");
+  setIsPrinting(false);
+}
   };
 
-  // Focus Protection
-  const [isFocused, setIsFocused] = useState(true);
-  useEffect(() => {
-    const onBlur = () => setIsFocused(false);
-    const onFocus = () => setIsFocused(true);
-    window.addEventListener('blur', onBlur);
-    window.addEventListener('focus', onFocus);
-    return () => { window.removeEventListener('blur', onBlur); window.removeEventListener('focus', onFocus); };
-  }, []);
+// Focus Protection
+const [isFocused, setIsFocused] = useState(true);
+useEffect(() => {
+  const onBlur = () => setIsFocused(false);
+  const onFocus = () => setIsFocused(true);
+  window.addEventListener('blur', onBlur);
+  window.addEventListener('focus', onFocus);
+  return () => { window.removeEventListener('blur', onBlur); window.removeEventListener('focus', onFocus); };
+}, []);
 
-  // Block Right Click and Ctrl+P
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
-        e.preventDefault();
-        alert('Yazdırma işlemi sadece buton üzerinden yapılabilir.');
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+// Block Right Click and Ctrl+P
+useEffect(() => {
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+      e.preventDefault();
+      alert('Yazdırma işlemi sadece buton üzerinden yapılabilir.');
+    }
+  };
+  window.addEventListener('keydown', handleKeyDown);
+  return () => window.removeEventListener('keydown', handleKeyDown);
+}, []);
 
-  // Calculate generic page width/height for placeholders
-  const getPageWidth = () => containerWidth > 0 ? Math.min(containerWidth - 32, 1000) : 800;
-  const renderedWidth = getPageWidth() * scale;
-  const estimatedHeight = renderedWidth * 1.414;
+// Calculate generic page width/height for placeholders
+const getPageWidth = () => containerWidth > 0 ? Math.min(containerWidth - 32, 1000) : 800;
+const renderedWidth = getPageWidth() * scale;
+const estimatedHeight = renderedWidth * 1.414;
 
-  return (
-    <div
-      className={`fixed inset-0 bg-slate-900 flex flex-col z-50 select-none ${!isFocused ? 'blur-xl' : ''}`}
-      onContextMenu={(e) => e.preventDefault()}
-    >
-      {/* Sidebar Toolbar - Desktop */}
-      <div className="absolute top-1/2 left-4 md:flex flex-col gap-2 bg-slate-800 border border-slate-600 rounded-xl p-2 hidden transform -translate-y-1/2 shadow-2xl z-[60]">
-        <button onClick={() => setToolMode('CURSOR')}
-          className={`p-3 rounded-lg transition ${toolMode === 'CURSOR' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Seçim / İmleç">
-          <i className="fas fa-mouse-pointer"></i>
-        </button>
+return (
+  <div
+    className={`fixed inset-0 bg-slate-900 flex flex-col z-50 select-none ${!isFocused ? 'blur-xl' : ''}`}
+    onContextMenu={(e) => e.preventDefault()}
+  >
+    {/* Sidebar Toolbar - Desktop */}
+    <div className="absolute top-1/2 left-4 md:flex flex-col gap-2 bg-slate-800 border border-slate-600 rounded-xl p-2 hidden transform -translate-y-1/2 shadow-2xl z-[60]">
+      <button onClick={() => setToolMode('CURSOR')}
+        className={`p-3 rounded-lg transition ${toolMode === 'CURSOR' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Seçim / İmleç">
+        <i className="fas fa-mouse-pointer"></i>
+      </button>
 
-        <div className="w-full h-px bg-slate-700 my-1"></div>
+      <div className="w-full h-px bg-slate-700 my-1"></div>
 
-        <button onClick={() => setToolMode('PEN')}
-          className={`p-3 rounded-lg transition ${toolMode === 'PEN' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Kalem">
-          <i className="fas fa-pen"></i>
-        </button>
+      <button onClick={() => setToolMode('PEN')}
+        className={`p-3 rounded-lg transition ${toolMode === 'PEN' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Kalem">
+        <i className="fas fa-pen"></i>
+      </button>
 
-        <button onClick={() => setToolMode('HIGHLIGHTER')}
-          className={`p-3 rounded-lg transition ${toolMode === 'HIGHLIGHTER' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Vurgulayıcı">
-          <i className="fas fa-highlighter"></i>
-        </button>
+      <button onClick={() => setToolMode('HIGHLIGHTER')}
+        className={`p-3 rounded-lg transition ${toolMode === 'HIGHLIGHTER' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Vurgulayıcı">
+        <i className="fas fa-highlighter"></i>
+      </button>
 
-        <button onClick={() => setToolMode('ERASER')}
-          className={`p-3 rounded-lg transition ${toolMode === 'ERASER' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Silgi">
-          <i className="fas fa-eraser"></i>
-        </button>
+      <button onClick={() => setToolMode('ERASER')}
+        className={`p-3 rounded-lg transition ${toolMode === 'ERASER' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Silgi">
+        <i className="fas fa-eraser"></i>
+      </button>
 
-        <button onClick={undoAnnotation}
-          className="p-3 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition" title="Geri Al">
-          <i className="fas fa-undo"></i>
-        </button>
-        <button onClick={clearPage}
-          className="p-3 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-900/30 transition" title="Sayfayı Temizle">
-          <i className="fas fa-trash"></i>
-        </button>
+      <button onClick={undoAnnotation}
+        className="p-3 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition" title="Geri Al">
+        <i className="fas fa-undo"></i>
+      </button>
+      <button onClick={clearPage}
+        className="p-3 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-900/30 transition" title="Sayfayı Temizle">
+        <i className="fas fa-trash"></i>
+      </button>
 
-        <div className="w-full h-px bg-slate-700 my-1"></div>
+      <div className="w-full h-px bg-slate-700 my-1"></div>
 
-        {/* Colors */}
-        <div className="flex flex-col gap-2 items-center p-1">
-          <button onClick={() => setPenColor('#EF4444')} className={`w-6 h-6 rounded-full bg-red-500 border-2 ${penColor === '#EF4444' ? 'border-white' : 'border-transparent'}`} />
-          <button onClick={() => setPenColor('#3B82F6')} className={`w-6 h-6 rounded-full bg-blue-500 border-2 ${penColor === '#3B82F6' ? 'border-white' : 'border-transparent'}`} />
-          <button onClick={() => setPenColor('#000000')} className={`w-6 h-6 rounded-full bg-black border-2 border-slate-500 ${penColor === '#000000' ? 'scale-110' : ''}`} />
-          <button onClick={() => setPenColor('#10B981')} className={`w-6 h-6 rounded-full bg-green-500 border-2 ${penColor === '#10B981' ? 'border-white' : 'border-transparent'}`} />
-        </div>
+      {/* Colors */}
+      <div className="flex flex-col gap-2 items-center p-1">
+        <button onClick={() => setPenColor('#EF4444')} className={`w-6 h-6 rounded-full bg-red-500 border-2 ${penColor === '#EF4444' ? 'border-white' : 'border-transparent'}`} />
+        <button onClick={() => setPenColor('#3B82F6')} className={`w-6 h-6 rounded-full bg-blue-500 border-2 ${penColor === '#3B82F6' ? 'border-white' : 'border-transparent'}`} />
+        <button onClick={() => setPenColor('#000000')} className={`w-6 h-6 rounded-full bg-black border-2 border-slate-500 ${penColor === '#000000' ? 'scale-110' : ''}`} />
+        <button onClick={() => setPenColor('#10B981')} className={`w-6 h-6 rounded-full bg-green-500 border-2 ${penColor === '#10B981' ? 'border-white' : 'border-transparent'}`} />
       </div>
+    </div>
 
-      {/* Top Header */}
-      <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shadow-lg shrink-0 z-[60]">
-        <div className="flex items-center gap-4">
-          <button onClick={onExit} className="text-white hover:bg-slate-700 p-2 rounded"><i className="fas fa-arrow-left"></i></button>
-          <h2 className="text-white font-bold truncate max-w-[150px] md:max-w-md">{book.name}</h2>
+    {/* Top Header */}
+    <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shadow-lg shrink-0 z-[60]">
+      <div className="flex items-center gap-4">
+        <button onClick={onExit} className="text-white hover:bg-slate-700 p-2 rounded"><i className="fas fa-arrow-left"></i></button>
+        <h2 className="text-white font-bold truncate max-w-[150px] md:max-w-md">{book.name}</h2>
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="bg-slate-700 rounded flex items-center mr-2">
+          <button onClick={() => handleZoom(-0.2)} className="p-2 text-white"><i className="fas fa-minus"></i></button>
+          <span className="text-white text-sm w-12 text-center">{Math.round(scale * 100)}%</span>
+          <button onClick={() => handleZoom(0.2)} className="p-2 text-white"><i className="fas fa-plus"></i></button>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="bg-slate-700 rounded flex items-center mr-2">
-            <button onClick={() => handleZoom(-0.2)} className="p-2 text-white"><i className="fas fa-minus"></i></button>
-            <span className="text-white text-sm w-12 text-center">{Math.round(scale * 100)}%</span>
-            <button onClick={() => handleZoom(0.2)} className="p-2 text-white"><i className="fas fa-plus"></i></button>
-          </div>
 
-          <button onClick={handlePrint} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 ml-2">
-            <i className="fas fa-print"></i>
+        <button onClick={handlePrint} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 ml-2">
+          <i className="fas fa-print"></i>
+        </button>
+      </div>
+    </div>
+
+    {/* Scrollable Content */}
+    <div ref={containerRef} className="flex-1 overflow-auto bg-slate-500 relative flex flex-col items-center pt-8 pb-24" onWheel={handleWheel}>
+      {!isFocused && <div className="fixed inset-0 z-[100] bg-black/50 text-white flex items-center justify-center text-2xl font-bold">Odaklanın</div>}
+
+      {pdfUrl ? (
+        // Error Fallback: If React-PDF fails, show native Iframe
+        loadError ? (
+          <div className="w-full h-full flex flex-col items-center justify-center p-4">
+            <div className="bg-red-500/10 text-red-400 p-4 rounded-lg mb-4 text-center">
+              <p className="font-bold">Gelişmiş görüntüleyici açılamadı.</p>
+              <p className="text-sm">Standart görüntüleyiciye geçiliyor...</p>
+            </div>
+            <iframe
+              src={pdfUrl}
+              className="w-full h-[80vh] bg-white rounded-lg shadow-xl"
+              title="PDF Viewer"
+            />
+          </div>
+        ) : (
+          <Document
+            key={pdfUrl} // Force remount if URL changes
+            file={pdfUrl}
+            options={options}
+            onLoadSuccess={onDocumentLoadSuccess}
+            onLoadError={(err) => {
+              console.error("PDF Load Error:", err);
+              // Switch to generic iframe fallback instead of just alerting
+              setLoadError(true);
+            }}
+            loading={<div className="text-white text-center mt-20"><i className="fas fa-spinner fa-spin text-4xl mb-4"></i><p>Dosya Hazırlanıyor...</p></div>}
+            error={null} // Handle error manually via state
+          >
+            {numPages && Array.from(new Array(numPages)).map((_, index) => {
+              const pageNum = index + 1;
+              // Virtualization: Only render pages around the current one
+              const isVisible = Math.abs(pageNum - currentPage) <= 2;
+              const height = pageHeights[pageNum] || estimatedHeight;
+
+              return (
+                <div key={`page-wrapper-${pageNum}`} id={`page-${pageNum}`} className="mb-4 transition-all duration-300" style={{ minHeight: height, width: renderedWidth }}>
+                  {isVisible ? (
+                    <SinglePDFPage
+                      pageNumber={pageNum}
+                      scale={scale}
+                      width={renderedWidth}
+                      toolMode={toolMode}
+                      penColor={penColor}
+                      annotations={annotations[pageNum] || []}
+                      onAnnotationAdd={addAnnotation}
+                      onPageLoad={handlePageLoad}
+                      devicePixelRatio={Math.min(window.devicePixelRatio || 1, 2)} // Cap DPI to 2 to prevent mobile canvas crash
+                    />
+                  ) : (
+                    <div className="bg-slate-400/20 rounded-lg animate-pulse flex items-center justify-center text-slate-400 font-bold text-2xl" style={{ height: height, width: renderedWidth }}>
+                      {pageNum}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </Document>
+        )
+      ) : <div className="text-white">Dosya hazırlanıyor...</div>}
+    </div>
+
+    {/* Mobile Bottom Toolbar (Unified) - Increased Z-Index to prevent Canvas blockage */}
+    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 p-2 z-[150] pb-6">
+      <div className="flex justify-between items-center px-4">
+        {/* Tools */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setToolMode('CURSOR')}
+            className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'CURSOR' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
+          >
+            <i className="fas fa-mouse-pointer text-xl mb-1"></i>
+            <span className="text-[10px]">Seç</span>
+          </button>
+          <button
+            onClick={() => setToolMode('PEN')}
+            className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'PEN' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
+          >
+            <i className="fas fa-pen text-xl mb-1"></i>
+            <span className="text-[10px]">Kalem</span>
+          </button>
+          <button
+            onClick={() => setToolMode('HIGHLIGHTER')}
+            className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'HIGHLIGHTER' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
+          >
+            <i className="fas fa-highlighter text-xl mb-1"></i>
+            <span className="text-[10px]">Fosforlu</span>
+          </button>
+          <button
+            onClick={() => setToolMode('ERASER')}
+            className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'ERASER' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
+          >
+            <i className="fas fa-eraser text-xl mb-1"></i>
+            <span className="text-[10px]">Silgi</span>
           </button>
         </div>
-      </div>
 
-      {/* Scrollable Content */}
-      <div ref={containerRef} className="flex-1 overflow-auto bg-slate-500 relative flex flex-col items-center pt-8 pb-24" onWheel={handleWheel}>
-        {!isFocused && <div className="fixed inset-0 z-[100] bg-black/50 text-white flex items-center justify-center text-2xl font-bold">Odaklanın</div>}
-
-        {pdfUrl ? (
-          // Error Fallback: If React-PDF fails, show native Iframe
-          loadError ? (
-            <div className="w-full h-full flex flex-col items-center justify-center p-4">
-              <div className="bg-red-500/10 text-red-400 p-4 rounded-lg mb-4 text-center">
-                <p className="font-bold">Gelişmiş görüntüleyici açılamadı.</p>
-                <p className="text-sm">Standart görüntüleyiciye geçiliyor...</p>
-              </div>
-              <iframe
-                src={pdfUrl}
-                className="w-full h-[80vh] bg-white rounded-lg shadow-xl"
-                title="PDF Viewer"
-              />
-            </div>
-          ) : (
-            <Document
-              key={pdfUrl} // Force remount if URL changes
-              file={pdfUrl}
-              options={options}
-              onLoadSuccess={onDocumentLoadSuccess}
-              onLoadError={(err) => {
-                console.error("PDF Load Error:", err);
-                // Switch to generic iframe fallback instead of just alerting
-                setLoadError(true);
+        {/* Actions */}
+        <div className="flex gap-2">
+          <button onClick={undoAnnotation} className="p-3 text-slate-300 active:text-white"><i className="fas fa-undo text-lg"></i></button>
+          <div className="w-px h-8 bg-slate-700 mx-1 self-center"></div>
+          {/* Active Color Preview */}
+          <div className="relative group">
+            <button
+              className="w-10 h-10 rounded-full border-2 border-white shadow-sm flex items-center justify-center"
+              style={{ backgroundColor: penColor }}
+              onClick={() => {
+                // Cycle colors
+                const colors = ['#EF4444', '#3B82F6', '#000000', '#10B981'];
+                const idx = colors.indexOf(penColor);
+                setPenColor(colors[(idx + 1) % colors.length]);
               }}
-              loading={<div className="text-white text-center mt-20"><i className="fas fa-spinner fa-spin text-4xl mb-4"></i><p>Dosya Hazırlanıyor...</p></div>}
-              error={null} // Handle error manually via state
             >
-              {numPages && Array.from(new Array(numPages)).map((_, index) => {
-                const pageNum = index + 1;
-                // Virtualization: Only render pages around the current one
-                const isVisible = Math.abs(pageNum - currentPage) <= 2;
-                const height = pageHeights[pageNum] || estimatedHeight;
-
-                return (
-                  <div key={`page-wrapper-${pageNum}`} id={`page-${pageNum}`} className="mb-4 transition-all duration-300" style={{ minHeight: height, width: renderedWidth }}>
-                    {isVisible ? (
-                      <SinglePDFPage
-                        pageNumber={pageNum}
-                        scale={scale}
-                        width={renderedWidth}
-                        toolMode={toolMode}
-                        penColor={penColor}
-                        annotations={annotations[pageNum] || []}
-                        onAnnotationAdd={addAnnotation}
-                        onPageLoad={handlePageLoad}
-                        devicePixelRatio={Math.min(window.devicePixelRatio || 1, 2)} // Cap DPI to 2 to prevent mobile canvas crash
-                      />
-                    ) : (
-                      <div className="bg-slate-400/20 rounded-lg animate-pulse flex items-center justify-center text-slate-400 font-bold text-2xl" style={{ height: height, width: renderedWidth }}>
-                        {pageNum}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </Document>
-          )
-        ) : <div className="text-white">Dosya hazırlanıyor...</div>}
-      </div>
-
-      {/* Mobile Bottom Toolbar (Unified) - Increased Z-Index to prevent Canvas blockage */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 p-2 z-[150] pb-6">
-        <div className="flex justify-between items-center px-4">
-          {/* Tools */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setToolMode('CURSOR')}
-              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'CURSOR' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
-            >
-              <i className="fas fa-mouse-pointer text-xl mb-1"></i>
-              <span className="text-[10px]">Seç</span>
             </button>
-            <button
-              onClick={() => setToolMode('PEN')}
-              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'PEN' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
-            >
-              <i className="fas fa-pen text-xl mb-1"></i>
-              <span className="text-[10px]">Kalem</span>
-            </button>
-            <button
-              onClick={() => setToolMode('HIGHLIGHTER')}
-              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'HIGHLIGHTER' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
-            >
-              <i className="fas fa-highlighter text-xl mb-1"></i>
-              <span className="text-[10px]">Fosforlu</span>
-            </button>
-            <button
-              onClick={() => setToolMode('ERASER')}
-              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'ERASER' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
-            >
-              <i className="fas fa-eraser text-xl mb-1"></i>
-              <span className="text-[10px]">Silgi</span>
-            </button>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-2">
-            <button onClick={undoAnnotation} className="p-3 text-slate-300 active:text-white"><i className="fas fa-undo text-lg"></i></button>
-            <div className="w-px h-8 bg-slate-700 mx-1 self-center"></div>
-            {/* Active Color Preview */}
-            <div className="relative group">
-              <button
-                className="w-10 h-10 rounded-full border-2 border-white shadow-sm flex items-center justify-center"
-                style={{ backgroundColor: penColor }}
-                onClick={() => {
-                  // Cycle colors
-                  const colors = ['#EF4444', '#3B82F6', '#000000', '#10B981'];
-                  const idx = colors.indexOf(penColor);
-                  setPenColor(colors[(idx + 1) % colors.length]);
-                }}
-              >
-              </button>
-            </div>
           </div>
         </div>
-
-        {/* Expanded Colors (Visible if Pen/Highlighter Active) */}
-        {(toolMode === 'PEN' || toolMode === 'HIGHLIGHTER') && (
-          <div className="flex justify-center gap-4 mt-3 pb-2 border-t border-slate-800 pt-2">
-            {['#EF4444', '#3B82F6', '#000000', '#10B981', '#F59E0B'].map(c => (
-              <button
-                key={c}
-                onClick={() => setPenColor(c)}
-                className={`w-8 h-8 rounded-full shadow-lg transform transition ${penColor === c ? 'scale-125 border-2 border-white' : 'scale-100 border border-transparent'}`}
-                style={{ backgroundColor: c }}
-              />
-            ))}
-          </div>
-        )}
       </div>
 
-      {/* Success Modal */}
-      {showSuccessModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
-          <div className="bg-white p-8 rounded-xl text-center">
-            <i className="fas fa-check-circle text-5xl text-green-500 mb-4"></i>
-            <h3 className="text-xl font-bold mb-4">Yazdırıldı</h3>
-            <button onClick={onExit} className="bg-slate-900 text-white px-6 py-2 rounded">Tamam</button>
-          </div>
+      {/* Expanded Colors (Visible if Pen/Highlighter Active) */}
+      {(toolMode === 'PEN' || toolMode === 'HIGHLIGHTER') && (
+        <div className="flex justify-center gap-4 mt-3 pb-2 border-t border-slate-800 pt-2">
+          {['#EF4444', '#3B82F6', '#000000', '#10B981', '#F59E0B'].map(c => (
+            <button
+              key={c}
+              onClick={() => setPenColor(c)}
+              className={`w-8 h-8 rounded-full shadow-lg transform transition ${penColor === c ? 'scale-125 border-2 border-white' : 'scale-100 border border-transparent'}`}
+              style={{ backgroundColor: c }}
+            />
+          ))}
         </div>
       )}
     </div>
-  );
+
+    {/* Success Modal */}
+    {showSuccessModal && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
+        <div className="bg-white p-8 rounded-xl text-center">
+          <i className="fas fa-check-circle text-5xl text-green-500 mb-4"></i>
+          <h3 className="text-xl font-bold mb-4">Yazdırıldı</h3>
+          <button onClick={onExit} className="bg-slate-900 text-white px-6 py-2 rounded">Tamam</button>
+        </div>
+      </div>
+    )}
+  </div>
+);
 };
 
 export default UserViewer;

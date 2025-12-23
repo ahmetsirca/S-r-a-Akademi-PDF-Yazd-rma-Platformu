@@ -684,11 +684,11 @@ const App: React.FC = () => {
             accessKey={activeKey || undefined}
             isDeviceVerified={isDeviceVerified}
             onExit={() => { setView('USER_LOGIN'); setActiveBook(null); setActiveKey(null); }}
-            // New Props
+            // Consolidated Permission Logic
             allowPrint={
-              (activeKey !== null) || // Legacy Key (allowed if limit > count, checked inside)
-              (userPermission?.canPrint === true) || // User Permission (checked inside)
-              (currentFolderKey?.allowPrint === true) // NEW: Folder Key Permission!
+              (activeKey && (activeKey.printLimit > activeKey.printCount)) ||
+              (userPermission?.canPrint === true) ||
+              (currentFolderKey?.allowPrint === true)
             }
           />
         )}
