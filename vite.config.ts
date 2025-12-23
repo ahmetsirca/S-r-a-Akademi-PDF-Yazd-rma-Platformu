@@ -20,7 +20,21 @@ export default defineConfig(({ mode }) => {
       }
     },
     build: {
+      chunkSizeWarningLimit: 1000,
       target: 'es2015', // Support older mobile browsers
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            // Core React
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            // PDF libraries are huge, split them out
+            'pdf-worker': ['pdfjs-dist'],
+            'pdf-viewer': ['react-pdf'],
+            // Supabase
+            'vendor-supabase': ['@supabase/supabase-js'],
+          }
+        }
+      },
     },
     optimizeDeps: {
       include: ['pdfjs-dist'], // Explicitly include pdfjs-dist
