@@ -198,9 +198,12 @@ interface UserViewerProps {
   accessKey?: AccessKey;
   isDeviceVerified?: boolean;
   onExit: () => void;
+  // New Props for external control
+  allowPrint?: boolean;
+  onPrintDecrement?: () => void;
 }
 
-const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerified = true, onExit }) => {
+const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerified = true, onExit, allowPrint = false, onPrintDecrement }) => {
   const [currentKey, setCurrentKey] = useState<AccessKey | undefined>(accessKey);
   const [userPermission, setUserPermission] = useState<import('../types').UserPermission | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -372,44 +375,85 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     let canPrint = false;
     let limitMessage = "";
 
+    // 1. Check Database Permissions (logged in user)
     if (userPermission) {
       if (!userPermission.canPrint) {
         canPrint = false;
       } else {
-        // Check specific limit if exists
         const limit = userPermission.printLimits?.[book.id];
         if (limit !== undefined) {
           canPrint = limit > 0;
           if (!canPrint) limitMessage = "Yazdırma limitiniz doldu.";
           else limitMessage = `Kalan yazdırma hakkınız: ${limit}`;
         } else {
-          // Fallback to global
-          canPrint = true;
+          canPrint = true; // Global permission without limit
         }
       }
     }
-    else if (currentKey) { canPrint = (currentKey.printLimit > currentKey.printCount); }
+    // 2. Check Legacy Access Key
+    else if (currentKey) {
+      canPrint = (currentKey.printLimit > currentKey.printCount);
+      if (!canPrint) limitMessage = "Anahtar yazdırma limitiniz doldu.";
+    }
+    // 3. New Prop Override
+    else if (allowPrint) {
+      canPrint = true;
+    }
 
     if (!canPrint) { alert(limitMessage || "Yazdırma izniniz yok."); return; }
 
     if (limitMessage && !confirm(`${limitMessage} Yazdırmak istiyor musunuz?`)) return;
 
+    if (!pdfUrl) return;
 
     setIsPrinting(true);
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = pdfUrl!;
-    document.body.appendChild(iframe);
 
-    iframe.onload = () => {
-      iframe.contentWindow?.print();
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-        setIsPrinting(false);
-        setShowSuccessModal(true);
-        if (!userPermission && currentKey) StorageService.updateKeyCount(currentKey.id);
-      }, 1000);
-    };
+    try {
+      // PROFESSIONAL PRINTING METHOD: Fetch > Blob > Iframe
+      const response = await fetch(pdfUrl);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = blobUrl;
+      document.body.appendChild(iframe);
+
+      iframe.onload = () => {
+        // Delay needed for Chrome/Firefox to render Blob URL in iframe before print
+        setTimeout(() => {
+          iframe.contentWindow?.print();
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+            URL.revokeObjectURL(blobUrl);
+            setIsPrinting(false);
+          }, 10000); // 10s wait for print interaction
+
+          setShowSuccessModal(true);
+
+          if (userPermission && userId) {
+            DBService.decrementPrintLimit(userId, book.id);
+            setUserPermission(prev => {
+              if (!prev || !prev.printLimits) return prev;
+              const current = prev.printLimits[book.id];
+              if (typeof current === 'number') {
+                return { ...prev, printLimits: { ...prev.printLimits, [book.id]: Math.max(0, current - 1) } };
+              }
+              return prev;
+            });
+          } else if (!userPermission && currentKey) {
+            StorageService.updateKeyCount(currentKey.id);
+          } else if (onPrintDecrement) {
+            onPrintDecrement();
+          }
+
+        }, 500);
+      };
+    } catch (e) {
+      console.error("Print Error:", e);
+      alert("Yazdırma sırasında bir hata oluştu.");
+      setIsPrinting(false);
+    }
   };
 
   // Focus Protection
