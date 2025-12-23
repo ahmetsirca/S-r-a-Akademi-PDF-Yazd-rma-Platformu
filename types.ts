@@ -68,6 +68,7 @@ export interface UserPermission {
   folderIds: string[]; // List of folder UUIDs user can access
   allowedFileIds: string[]; // List of file UUIDs
   canPrint: boolean;
+  printLimits?: Record<string, number>; // Map fileId -> remaining print count
   expiresAt: string | null; // ISO Date string
 }
 

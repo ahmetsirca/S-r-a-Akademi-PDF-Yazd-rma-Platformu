@@ -25,11 +25,12 @@ export const DBService = {
       folderIds: data.folder_ids || [],
       allowedFileIds: data.allowed_file_ids || [], // NEW
       canPrint: data.can_print,
+      printLimits: data.print_limits || {}, // NEW
       expiresAt: data.expires_at
     };
   },
 
-  async updateUserPermission(userId: string, folderIds: string[], allowedFileIds: string[], canPrint: boolean, expiresAt: string | null) {
+  async updateUserPermission(userId: string, folderIds: string[], allowedFileIds: string[], canPrint: boolean, expiresAt: string | null, printLimits: Record<string, number> = {}) {
     const { data: existing } = await supabase.from('user_permissions').select('id').eq('user_id', userId).single();
 
     if (existing) {
@@ -37,6 +38,7 @@ export const DBService = {
         folder_ids: folderIds,
         allowed_file_ids: allowedFileIds,
         can_print: canPrint,
+        print_limits: printLimits,
         expires_at: expiresAt
       }).eq('user_id', userId);
     } else {
@@ -45,8 +47,21 @@ export const DBService = {
         folder_ids: folderIds,
         allowed_file_ids: allowedFileIds,
         can_print: canPrint,
+        print_limits: printLimits,
         expires_at: expiresAt
       });
+    }
+  },
+
+  async decrementPrintLimit(userId: string, fileId: string) {
+    const perms = await this.getUserPermissions(userId);
+    if (!perms || !perms.printLimits) return;
+
+    const currentLimit = perms.printLimits[fileId];
+    if (typeof currentLimit === 'number' && currentLimit > 0) {
+      const newLimits = { ...perms.printLimits, [fileId]: currentLimit - 1 };
+      // Call update with NEW limits
+      await this.updateUserPermission(perms.userId, perms.folderIds, perms.allowedFileIds, perms.canPrint, perms.expiresAt, newLimits);
     }
   },
 

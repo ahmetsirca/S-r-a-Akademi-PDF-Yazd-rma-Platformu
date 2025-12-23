@@ -60,7 +60,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [permFolderIds, setPermFolderIds] = useState<string[]>([]);
   const [permFileIds, setPermFileIds] = useState<string[]>([]); // NEW
   const [permCanPrint, setPermCanPrint] = useState(false);
+  const [permPrintLimits, setPermPrintLimits] = useState<Record<string, number>>({}); // NEW
   const [permExpiresAt, setPermExpiresAt] = useState('');
+
 
   // Device Management State
   const [deviceModalOpen, setDeviceModalOpen] = useState(false);

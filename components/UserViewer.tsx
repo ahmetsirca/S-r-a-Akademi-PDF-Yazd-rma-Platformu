@@ -370,7 +370,29 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
   const handlePrint = async () => {
     let canPrint = false;
-    if (userPermission) { canPrint = userPermission.canPrint; }
+    let limitMessage = "";
+
+    if (userPermission) {
+      if (!userPermission.canPrint) {
+        canPrint = false;
+      } else {
+        // Check specific limit if exists
+        const limit = userPermission.printLimits?.[book.id];
+        if (limit !== undefined) {
+          canPrint = limit > 0;
+          if (!canPrint) limitMessage = "Yazdırma limitiniz doldu.";
+          else limitMessage = `Kalan yazdırma hakkınız: ${limit}`;
+        } else {
+          // Fallback to global
+          canPrint = true;
+        }
+      }
+    }
+    else if (currentKey) { canPrint = (currentKey.printLimit > currentKey.printCount); }
+
+    if (!canPrint) { alert(limitMessage || "Yazdırma izniniz yok."); return; }
+
+    if (limitMessage && !confirm(`${limitMessage} Yazdırmak istiyor musunuz?`)) return;
     else if (currentKey) { canPrint = (currentKey.printLimit > currentKey.printCount); }
 
     if (!canPrint) { alert("Yazdırma izniniz yok."); return; }
