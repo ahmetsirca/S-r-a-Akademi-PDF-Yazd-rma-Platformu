@@ -505,21 +505,51 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Erişim İzni Verilecek Özel Dosyalar</label>
                   <div className="max-h-60 overflow-y-auto border rounded-xl p-3 grid grid-cols-1 md:grid-cols-2 gap-2 bg-slate-50">
-                    {allFiles.map(f => (
-                      <label key={f.id} className={`flex items-center gap-2 p-2 rounded cursor-pointer border transition ${permFileIds.includes(f.id) ? 'bg-green-50 border-green-200' : 'bg-white border-transparent'}`}>
-                        <input
-                          type="checkbox"
-                          className="w-4 h-4 text-green-600 rounded"
-                          checked={permFileIds.includes(f.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) setPermFileIds(prev => [...prev, f.id]);
-                            else setPermFileIds(prev => prev.filter(id => id !== f.id));
-                          }}
-                        />
-                        <i className={`fas ${f.type === 'pdf' ? 'fa-file-pdf text-red-500' : 'fa-link text-blue-500'}`}></i>
-                        <span className="text-sm font-medium text-slate-700 truncate">{f.title}</span>
-                      </label>
-                    ))}
+                    {allFiles.map(f => {
+                      const isSelected = permFileIds.includes(f.id);
+                      return (
+                        <div key={f.id} className={`flex flex-col p-2 rounded border transition ${isSelected ? 'bg-green-50 border-green-200' : 'bg-white border-transparent'}`}>
+                          <label className="flex items-center gap-2 cursor-pointer mb-2">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 text-green-600 rounded"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) setPermFileIds(prev => [...prev, f.id]);
+                                else {
+                                  setPermFileIds(prev => prev.filter(id => id !== f.id));
+                                  // Optional: Clear limit when unchecked
+                                  setPermPrintLimits(prev => {
+                                    const next = { ...prev };
+                                    delete next[f.id];
+                                    return next;
+                                  });
+                                }
+                              }}
+                            />
+                            <i className={`fas ${f.type === 'pdf' ? 'fa-file-pdf text-red-500' : 'fa-link text-blue-500'}`}></i>
+                            <span className="text-sm font-medium text-slate-700 truncate">{f.title}</span>
+                          </label>
+
+                          {isSelected && f.type === 'pdf' && (
+                            <div className="flex items-center gap-2 ml-6">
+                              <span className="text-xs text-slate-500">Yazdırma Hakkı:</span>
+                              <input
+                                type="number"
+                                min="0"
+                                className="w-16 p-1 text-xs border rounded text-center font-bold"
+                                placeholder="0"
+                                value={permPrintLimits[f.id] ?? 0}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  setPermPrintLimits(prev => ({ ...prev, [f.id]: val }));
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                     {allFiles.length === 0 && <p className="text-xs text-slate-400 p-2 text-center col-span-2">Sistemde hiç dosya yok.</p>}
                   </div>
                 </div>
