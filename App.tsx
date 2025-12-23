@@ -158,8 +158,14 @@ const App: React.FC = () => {
   };
 
   // --- Folder Navigation Logic ---
+
   const handleFolderClick = async (folder: import('./types').Folder) => {
-    // Check if unlocked or requires auth
+    // Strict Login Check
+    if (!userProfile) {
+      alert("Lütfen önce sol taraftan Öğrenci Girişi yapınız.");
+      return;
+    }
+
     if (unlockedFolderIds.includes(folder.id)) {
       setNavigationStack(prev => [...prev, folder]);
       setFolderContent(await StorageService.getFolderContent(folder.id));
@@ -391,46 +397,33 @@ const App: React.FC = () => {
                   <div className="relative z-10">
                     <h3 className="text-xl font-bold text-slate-800 mb-1">YAZDIRMAK İÇİN ERİŞİM ŞİFRESİNİ GİR</h3>
                     <p className="text-xs text-slate-500 mb-4">Elinizdeki özel erişim kodunu buraya girerek ilgili içeriklere erişebilirsiniz.</p>
-
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        placeholder="Erişim Şifresi"
-                        className="flex-1 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none font-mono tracking-widest text-center uppercase"
+                        disabled={!userProfile}
+                        placeholder={userProfile ? "Erişim Şifresi" : "Lütfen Giriş Yapın"}
+                        className={`flex-1 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none font-mono tracking-widest text-center uppercase ${!userProfile ? 'opacity-50 cursor-not-allowed' : ''}`}
                         value={loginCode}
                         onChange={e => setLoginCode(e.target.value)}
                       />
                       <button
                         onClick={async () => {
+                          if (!userProfile) return alert("Lütfen önce giriş yapın.");
                           if (!loginCode) return alert("Lütfen şifre girin.");
                           setIsLoading(true);
                           try {
-                            if (userProfile) {
-                              // User Logged In -> Redeem Code directly
-                              await AuthService.redeemCode(userProfile.id, loginCode.trim());
-                              alert("Teşekkürler! Erişim şifreniz hesabınıza tanımlandı. İlgili klasörlere artık erişebilirsiniz.");
-                              setLoginCode('');
+                            // User Logged In -> Redeem Code directly
+                            await AuthService.redeemCode(userProfile.id, loginCode.trim());
+                            alert("Teşekkürler! Erişim şifreniz hesabınıza tanımlandı. İlgili klasörlere artık erişebilirsiniz.");
+                            setLoginCode('');
 
-                              // Refresh permissions
-                              DBService.getUserPermissions(userProfile.id).then(setUserPermission);
-                              // Refresh folders permissions locally if needed (re-login logic basically refreshes unclocked folders)
-                              // But visually, the user can just click folders.
-                              // Ideally we should reload the 'unlockedFolderIds' state
-                              const sess = await AuthService.checkPermissionAccess(userProfile.fullName, userProfile.email);
-                              if (sess) {
-                                setUnlockedFolderIds(sess.unlockedFolders);
-                                setUnlockedFileIds(sess.unlockedFiles); // NEW
-                              }
+                            // Refresh permissions
+                            DBService.getUserPermissions(userProfile.id).then(setUserPermission);
 
-                            } else {
-                              // Not Logged In -> Just alert
-                              alert("Şifre algılandı. Erişim sağlamak için lütfen sol taraftan Giriş Yapın veya Kayıt Olun. Girdiğiniz şifre otomatik olarak hesabınıza eklenecektir.");
-                              // We keep loginCode in state so it populates the Login/Register flow automatically if we were to modify it to read from there.
-                              // But currently our Login/Register inputs read from their own state? 
-                              // Wait, 'loginCode' state is shared! 
-                              // const [loginCode, setLoginCode] = useState(''); declared at top of App
-                              // So when they type here, it updates the state used by Login/Register logic too!
-                              // So they just need to fill the rest of the form.
+                            const sess = await AuthService.checkPermissionAccess(userProfile.fullName, userProfile.email);
+                            if (sess) {
+                              setUnlockedFolderIds(sess.unlockedFolders);
+                              setUnlockedFileIds(sess.unlockedFiles);
                             }
                           } catch (e: any) {
                             alert(e.message || "Hata oluştu.");
@@ -438,7 +431,8 @@ const App: React.FC = () => {
                             setIsLoading(false);
                           }
                         }}
-                        className="bg-indigo-600 text-white px-4 rounded-lg hover:bg-indigo-700 font-bold shadow-md active:scale-95 transition"
+                        disabled={!userProfile}
+                        className={`bg-indigo-600 text-white px-4 rounded-lg hover:bg-indigo-700 font-bold shadow-md active:scale-95 transition ${!userProfile ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         <i className="fas fa-arrow-right"></i>
                       </button>
@@ -695,14 +689,16 @@ const App: React.FC = () => {
       </main>
 
       {/* Footer */}
-      {view !== 'USER_VIEWER' && (
-        <footer className="mt-20 text-center pb-8 px-4">
-          <p className="text-slate-800 font-bold mb-1">SIRÇA AKADEMİ (KOMİSERİM PAEMİSYON)</p>
-          <p className="text-blue-600 font-medium mb-4">Uygulama Şuheda SIRÇA tarafından yapılmıştır.</p>
-          <p className="text-slate-400 text-xs">© 2025 • Güvenli Belge Dağıtım Sistemi</p>
-        </footer>
-      )}
-    </div>
+      {
+        view !== 'USER_VIEWER' && (
+          <footer className="mt-20 text-center pb-8 px-4">
+            <p className="text-slate-800 font-bold mb-1">SIRÇA AKADEMİ (KOMİSERİM PAEMİSYON)</p>
+            <p className="text-blue-600 font-medium mb-4">Uygulama Şuheda SIRÇA tarafından yapılmıştır.</p>
+            <p className="text-slate-400 text-xs">© 2025 • Güvenli Belge Dağıtım Sistemi</p>
+          </footer>
+        )
+      }
+    </div >
   );
 };
 
