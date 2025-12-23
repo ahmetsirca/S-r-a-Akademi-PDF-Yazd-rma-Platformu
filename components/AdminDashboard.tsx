@@ -131,7 +131,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const handleSavePermissions = async () => {
     if (!selectedUser) return;
     try {
-      await import('../services/db').then(m => m.DBService.updateUserPermission(
+      const result = await import('../services/db').then(m => m.DBService.updateUserPermission(
         selectedUser.id,
         permFolderIds,
         permFileIds,
@@ -139,9 +139,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         permExpiresAt ? new Date(permExpiresAt).toISOString() : null,
         permPrintLimits
       ));
+
+      if (result.error) {
+        console.error("Supabase Update Error:", result.error);
+        alert(`Güncelleme başarısız: ${result.error.message || 'Veritabanı hatası'}`);
+        return;
+      }
+
       setPermModalOpen(false);
       alert("İzinler güncellendi.");
-    } catch (e) { console.error(e); alert("Hata oluştu."); }
+    } catch (e: any) { console.error(e); alert(`Hata oluştu: ${e.message}`); }
   };
 
   const handleOpenDeviceModal = async (user: import('../types').UserProfile) => {
