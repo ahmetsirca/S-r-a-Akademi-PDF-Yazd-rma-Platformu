@@ -16,7 +16,7 @@ import { AuthService } from '../services/auth';
 // Types for Annotation
 interface AnnotationPath {
   points: { x: number, y: number }[];
-  type: 'PEN' | 'HIGHLIGHTER';
+  type: 'PEN' | 'HIGHLIGHTER' | 'ERASER';
   color: string;
   width: number;
 }
@@ -73,7 +73,11 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
-        if (toolMode === 'HIGHLIGHTER') {
+        if (toolMode === 'ERASER') {
+          ctx.globalCompositeOperation = 'destination-out';
+          ctx.lineWidth = 20;
+          ctx.strokeStyle = 'rgba(0,0,0,1)';
+        } else if (toolMode === 'HIGHLIGHTER') {
           ctx.globalAlpha = 0.3; // Transparent
           ctx.lineWidth = 20;
           ctx.strokeStyle = penColor === '#000000' ? '#FFFF00' : penColor; // Default to yellow if black is selected/default
@@ -101,9 +105,9 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
     if (currentPath.current.length > 0) {
       onAnnotationAdd(pageNumber, {
         points: currentPath.current,
-        type: toolMode === 'HIGHLIGHTER' ? 'HIGHLIGHTER' : 'PEN',
+        type: toolMode === 'ERASER' ? 'ERASER' : (toolMode === 'HIGHLIGHTER' ? 'HIGHLIGHTER' : 'PEN'),
         color: toolMode === 'HIGHLIGHTER' && penColor === '#000000' ? '#FFFF00' : penColor,
-        width: toolMode === 'HIGHLIGHTER' ? 20 : 3
+        width: toolMode === 'HIGHLIGHTER' || toolMode === 'ERASER' ? 20 : 3
       });
     }
     currentPath.current = [];
@@ -130,7 +134,11 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
 
-      if (ann.type === 'HIGHLIGHTER') {
+      if (ann.type === 'ERASER') {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.lineWidth = ann.width || 20;
+        ctx.strokeStyle = 'rgba(0,0,0,1)';
+      } else if (ann.type === 'HIGHLIGHTER') {
         ctx.globalAlpha = 0.3;
         ctx.lineWidth = ann.width || 20;
         ctx.strokeStyle = ann.color;
@@ -416,7 +424,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       className={`fixed inset-0 bg-slate-900 flex flex-col z-50 select-none ${!isFocused ? 'blur-xl' : ''}`}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {/* Sidebar Toolbar */}
+      {/* Sidebar Toolbar - Desktop */}
       <div className="absolute top-1/2 left-4 md:flex flex-col gap-2 bg-slate-800 border border-slate-600 rounded-xl p-2 hidden transform -translate-y-1/2 shadow-2xl z-[60]">
         <button onClick={() => setToolMode('CURSOR')}
           className={`p-3 rounded-lg transition ${toolMode === 'CURSOR' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Seçim / İmleç">
@@ -433,6 +441,11 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         <button onClick={() => setToolMode('HIGHLIGHTER')}
           className={`p-3 rounded-lg transition ${toolMode === 'HIGHLIGHTER' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Vurgulayıcı">
           <i className="fas fa-highlighter"></i>
+        </button>
+
+        <button onClick={() => setToolMode('ERASER')}
+          className={`p-3 rounded-lg transition ${toolMode === 'ERASER' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Silgi">
+          <i className="fas fa-eraser"></i>
         </button>
 
         <button onClick={undoAnnotation}
@@ -539,8 +552,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         ) : <div className="text-white">Dosya hazırlanıyor...</div>}
       </div>
 
-      {/* Mobile Bottom Toolbar (Unified) */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 p-2 z-[70] pb-6">
+      {/* Mobile Bottom Toolbar (Unified) - Increased Z-Index to prevent Canvas blockage */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 p-2 z-[150] pb-6">
         <div className="flex justify-between items-center px-4">
           {/* Tools */}
           <div className="flex gap-2">
@@ -564,6 +577,13 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
             >
               <i className="fas fa-highlighter text-xl mb-1"></i>
               <span className="text-[10px]">Fosforlu</span>
+            </button>
+            <button
+              onClick={() => setToolMode('ERASER')}
+              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'ERASER' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
+            >
+              <i className="fas fa-eraser text-xl mb-1"></i>
+              <span className="text-[10px]">Silgi</span>
             </button>
           </div>
 
