@@ -6,14 +6,11 @@ import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 // import '../index.css'; // Removed: Tailwind is loaded via CDN
 
-// Set worker source - Use local file in public folder for maximum stability
-// This avoids CDN downtime, CORS issues, and version mismatches
-pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+// Set worker source - Use local file with absolute path for safety
+pdfjs.GlobalWorkerOptions.workerSrc = new URL('/pdf.worker.min.mjs', window.location.origin).toString();
 
 import { DBService } from '../services/db';
 import { AuthService } from '../services/auth';
-
-
 
 // Types for Annotation
 interface AnnotationPath {
@@ -32,9 +29,10 @@ interface SinglePDFPageProps {
   annotations: AnnotationPath[];
   onAnnotationAdd: (page: number, path: AnnotationPath) => void;
   onPageLoad: (page: number, height: number) => void;
+  devicePixelRatio?: number;
 }
 
-const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width, toolMode, penColor, annotations, onAnnotationAdd, onPageLoad }) => {
+const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width, toolMode, penColor, annotations, onAnnotationAdd, onPageLoad, devicePixelRatio }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
   const currentPath = useRef<{ x: number, y: number }[]>([]);
@@ -160,11 +158,14 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
       <Page
         pageNumber={pageNumber}
         width={width}
-        scale={scale} // Restored scale prop to ensure correct internal calculations
+        scale={scale}
+        devicePixelRatio={devicePixelRatio} // Apply cap
         renderAnnotationLayer={false}
         renderTextLayer={true}
         onLoadSuccess={handlePageLoadSuccess}
+        onRenderError={(err) => console.error(`Page ${pageNumber} Render Error:`, err)}
         loading={<div className="bg-white animate-pulse w-full" style={{ height: width * 1.41 }} />}
+        error={<div className="flex items-center justify-center text-red-400 h-96">Sayfa Yüklenemedi</div>}
       />
       {/* Canvas moved outside Page component to ensure it sits on top of TextLayer */}
       <canvas
@@ -332,9 +333,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       if (el) observer.observe(el);
     }
     return () => observer.disconnect();
-  }, [numPages, pdfUrl]); // Note: dependency on 'pdfUrl' to re-attach if doc reloads, but persistent divs mean we are safe mostly. 
-  // However, if we scroll fast, new divs are already there. The problem is if React unmounts/remounts the wrapper.
-  // With the map below, the KEY is stable, so wrapper is stable.
+  }, [numPages, pdfUrl]);
 
   const handleZoom = (delta: number) => {
     setScale(prev => Math.min(Math.max(0.5, prev + delta), 3.0));
@@ -400,10 +399,6 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
   // Calculate generic page width/height for placeholders
   const getPageWidth = () => containerWidth > 0 ? Math.min(containerWidth - 32, 1000) : 800;
-  // Apply zoom to width? No, width prop handles it usually, but let's be consistent.
-  // If we pass 'width' to Page, 'scale' is often secondary. 
-  // For 'react-pdf', if width is given, it scales to that width. 
-  // If we want to Zoom *in*, we should increase the passed WIDTH.
   const renderedWidth = getPageWidth() * scale;
   const estimatedHeight = renderedWidth * 1.414;
 
@@ -412,9 +407,6 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       className={`fixed inset-0 bg-slate-900 flex flex-col z-50 select-none ${!isFocused ? 'blur-xl' : ''}`}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {/* CSS to ensure Drawing Canvas is always interactive and Text Layer doesn't block it */}
-
-
       {/* Sidebar Toolbar */}
       <div className="absolute top-1/2 left-4 md:flex flex-col gap-2 bg-slate-800 border border-slate-600 rounded-xl p-2 hidden transform -translate-y-1/2 shadow-2xl z-[60]">
         <button onClick={() => setToolMode('CURSOR')}
@@ -467,8 +459,6 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
             <button onClick={() => handleZoom(0.2)} className="p-2 text-white"><i className="fas fa-plus"></i></button>
           </div>
 
-
-
           <button onClick={handlePrint} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 ml-2">
             <i className="fas fa-print"></i>
           </button>
@@ -499,7 +489,6 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
             {numPages && Array.from(new Array(numPages)).map((_, index) => {
               const pageNum = index + 1;
               // Virtualization: Only render pages around the current one
-              // A buffer of 2 above and 2 below is good. 5 pages total.
               const isVisible = Math.abs(pageNum - currentPage) <= 2;
               const height = pageHeights[pageNum] || estimatedHeight;
 
@@ -508,13 +497,14 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
                   {isVisible ? (
                     <SinglePDFPage
                       pageNumber={pageNum}
-                      scale={scale} // We handle scale in width calc, but passing scale ensures react-pdf knows
+                      scale={scale}
                       width={renderedWidth}
                       toolMode={toolMode}
                       penColor={penColor}
                       annotations={annotations[pageNum] || []}
                       onAnnotationAdd={addAnnotation}
                       onPageLoad={handlePageLoad}
+                      devicePixelRatio={Math.min(window.devicePixelRatio || 1, 2)} // Cap DPI to 2 to prevent mobile canvas crash
                     />
                   ) : (
                     <div className="bg-slate-400/20 rounded-lg animate-pulse flex items-center justify-center text-slate-400 font-bold text-2xl" style={{ height: height, width: renderedWidth }}>
@@ -566,19 +556,13 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
                 className="w-10 h-10 rounded-full border-2 border-white shadow-sm flex items-center justify-center"
                 style={{ backgroundColor: penColor }}
                 onClick={() => {
-                  // Toggle a small popover or just cycle? Let's Simple Cycle for simplicity first, or small popover.
-                  // Let's use a small localized popover logic or stick to the bar.
-                  // Actually, let's show colors IN the bar if drawing mode is active.
+                  // Cycle colors
+                  const colors = ['#EF4444', '#3B82F6', '#000000', '#10B981'];
+                  const idx = colors.indexOf(penColor);
+                  setPenColor(colors[(idx + 1) % colors.length]);
                 }}
               >
               </button>
-
-              {/* Mini Color Picker Popover (Only shows when clicking or hovering on desktop, but for mobile let's put it side-by-side if space allows, or popover) */}
-              <div className="hidden group-focus-within:flex absolute bottom-full mb-2 right-0 bg-slate-800 p-2 rounded-xl shadow-xl flex-col gap-2 border border-slate-600">
-                {['#EF4444', '#3B82F6', '#000000', '#10B981'].map(c => (
-                  <button key={c} onClick={() => setPenColor(c)} className="w-8 h-8 rounded-full border border-slate-500" style={{ backgroundColor: c }} />
-                ))}
-              </div>
             </div>
           </div>
         </div>
