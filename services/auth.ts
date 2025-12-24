@@ -292,6 +292,23 @@ export const AuthService = {
         };
     },
 
+    async changePassword(userId: string, oldPass: string, newPass: string) {
+        // 1. Verify Old
+        const { data: user } = await supabase.from('profiles').select('password').eq('id', userId).single();
+        if (!user || user.password !== oldPass) {
+            throw new Error("Eski şifreniz hatalı.");
+        }
+
+        // 2. Update
+        const { error } = await supabase.from('profiles').update({ password: newPass }).eq('id', userId);
+        if (error) throw error;
+    },
+
+    async adminResetPassword(userId: string, newPass: string) {
+        const { error } = await supabase.from('profiles').update({ password: newPass }).eq('id', userId);
+        if (error) throw error;
+    },
+
     async logout(userId: string) {
         localStorage.removeItem('sirca_user_session');
         await supabase.from('profiles').update({ is_online: false }).eq('id', userId);

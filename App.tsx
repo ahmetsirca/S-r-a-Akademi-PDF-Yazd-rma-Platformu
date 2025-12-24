@@ -28,6 +28,11 @@ const App: React.FC = () => {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginCode, setLoginCode] = useState(''); // Restore Code Input
 
+  // Password Change State
+  const [showUserPassChange, setShowUserPassChange] = useState(false);
+  const [changeOldPass, setChangeOldPass] = useState('');
+  const [changeNewPass, setChangeNewPass] = useState('');
+
   // Folder System State
   const [folders, setFolders] = useState<import('./types').Folder[]>([]);
   const [folderContent, setFolderContent] = useState<import('./types').FolderContent[]>([]);
@@ -316,6 +321,46 @@ const App: React.FC = () => {
                       {!isDeviceVerified && (
                         <div className="bg-red-500/10 text-red-600 text-xs p-2 rounded mb-3 border border-red-500/20 font-bold">
                           <i className="fas fa-exclamation-triangle mr-1"></i> Yeni Cihaz (Onay Bekliyor)
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => setShowUserPassChange(!showUserPassChange)}
+                        className="text-xs text-blue-500 font-bold hover:underline mb-4 block mx-auto"
+                      >
+                        <i className="fas fa-key mr-1"></i> Şifre Değiştir
+                      </button>
+
+                      {showUserPassChange && (
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4 text-left animate-fade-in relative">
+                          <button onClick={() => { setShowUserPassChange(false); setChangeOldPass(''); setChangeNewPass(''); }} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><i className="fas fa-times"></i></button>
+                          <h4 className="font-bold text-xs text-slate-700 mb-2">Şifre Yenileme</h4>
+                          <input
+                            type="password" placeholder="Eski Şifre" className="w-full text-xs p-2 border rounded mb-2"
+                            value={changeOldPass} onChange={e => setChangeOldPass(e.target.value)}
+                          />
+                          <input
+                            type="password" placeholder="Yeni Şifre" className="w-full text-xs p-2 border rounded mb-2"
+                            value={changeNewPass} onChange={e => setChangeNewPass(e.target.value)}
+                          />
+                          <button
+                            disabled={!changeOldPass || !changeNewPass}
+                            onClick={async () => {
+                              try {
+                                if (!userProfile) return;
+                                await AuthService.changePassword(userProfile.id, changeOldPass, changeNewPass);
+                                alert('Şifreniz başarıyla değiştirildi.');
+                                setShowUserPassChange(false);
+                                setChangeOldPass('');
+                                setChangeNewPass('');
+                              } catch (e: any) {
+                                alert(e.message || "Hata oluştu");
+                              }
+                            }}
+                            className="w-full bg-blue-600 text-white text-xs py-1.5 rounded font-bold hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            Kaydet
+                          </button>
                         </div>
                       )}
 

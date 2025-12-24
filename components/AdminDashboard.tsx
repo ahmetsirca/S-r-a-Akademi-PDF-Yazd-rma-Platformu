@@ -424,6 +424,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                     <button onClick={() => handleOpenPermModal(u)} className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-sm font-bold transition">
                       <i className="fas fa-lock-open mr-2"></i>İzinler
                     </button>
+                    <button onClick={() => {
+                      const newPass = prompt(`"${u.fullName}" için yeni şifre belirleyin:`);
+                      if (newPass) {
+                        import('../services/auth').then(m => m.AuthService.adminResetPassword(u.id, newPass))
+                          .then(() => alert('Şifre güncellendi.'))
+                          .catch(e => alert('Hata: ' + e.message));
+                      }
+                    }} className="bg-orange-50 text-orange-600 hover:bg-orange-100 px-3 py-1.5 rounded-lg text-sm font-bold transition">
+                      <i className="fas fa-key mr-2"></i>Şifre
+                    </button>
                   </td>
                 </tr>
               ))}
