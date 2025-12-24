@@ -69,12 +69,28 @@ export const DBService = {
   async getVocab(userId: string) {
     let { data, error } = await supabase.from('user_vocab').select('*').eq('user_id', userId).order('created_at', { ascending: false });
     if (error) { console.error(error); return []; }
-    return data as import('../types').UserVocab[];
+    return (data || []).map(item => ({
+      id: item.id,
+      userId: item.user_id,
+      wordEn: item.word_en,
+      wordTr: item.word_tr,
+      createdAt: item.created_at
+    }));
   },
 
   async addVocab(userId: string, en: string, tr: string) {
     let { data, error } = await supabase.from('user_vocab').insert({ user_id: userId, word_en: en, word_tr: tr }).select().single();
-    return { data, error };
+    let mappedData = null;
+    if (data) {
+      mappedData = {
+        id: data.id,
+        userId: data.user_id,
+        wordEn: data.word_en,
+        wordTr: data.word_tr,
+        createdAt: data.created_at
+      };
+    }
+    return { data: mappedData, error };
   },
 
   async deleteVocab(vocabId: string) {
