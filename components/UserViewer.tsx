@@ -74,6 +74,7 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
         ctx.lineJoin = 'round';
 
         if (toolMode === 'ERASER') {
+          ctx.globalAlpha = 1.0;
           ctx.globalCompositeOperation = 'destination-out';
           ctx.lineWidth = 20;
           ctx.strokeStyle = 'rgba(0,0,0,1)';
@@ -135,6 +136,7 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
       ctx.lineJoin = 'round';
 
       if (ann.type === 'ERASER') {
+        ctx.globalAlpha = 1.0;
         ctx.globalCompositeOperation = 'destination-out';
         ctx.lineWidth = ann.width || 20;
         ctx.strokeStyle = 'rgba(0,0,0,1)';
