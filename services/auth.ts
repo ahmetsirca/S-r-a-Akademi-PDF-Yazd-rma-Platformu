@@ -181,10 +181,15 @@ export const AuthService = {
         // 5. IP / Device Check
         let ipAddress = '0.0.0.0';
         try {
-            const ipRes = await fetch('https://api.ipify.org?format=json');
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), 3000); // 3s timeout
+            const ipRes = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
+            clearTimeout(id);
             const ipJson = await ipRes.json();
             ipAddress = ipJson.ip;
-        } catch (e) { }
+        } catch (e) {
+            console.warn("IP Check Failed/Timeout, defaulting to 0.0.0.0");
+        }
 
         let isDeviceApproved = false;
         const { data: existingDevice } = await supabase.from('user_devices').select('*').eq('user_id', user.id).eq('ip_address', ipAddress).single();
@@ -260,10 +265,15 @@ export const AuthService = {
         // Quick IP Check for current session status
         let ipAddress = '0.0.0.0';
         try {
-            const ipRes = await fetch('https://api.ipify.org?format=json');
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), 3000);
+            const ipRes = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
+            clearTimeout(id);
             const ipJson = await ipRes.json();
             ipAddress = ipJson.ip;
-        } catch (e) { }
+        } catch (e) {
+            console.warn("IP Check Failed/Timeout, defaulting to 0.0.0.0");
+        }
 
         const { data: existingDevice } = await supabase.from('user_devices').select('is_approved').eq('user_id', user.id).eq('ip_address', ipAddress).single();
 

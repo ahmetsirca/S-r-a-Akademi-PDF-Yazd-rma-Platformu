@@ -49,34 +49,51 @@ const App: React.FC = () => {
 
   // Initial Fetch & Auth Check
   useEffect(() => {
-    console.log('App Build Timestamp: 2025-12-23 01:18 - Vercel Force Update');
-    fetchInitialData();
+    console.log('App Build Timestamp: 2025-12-24 20:30 - Fixes Applied');
 
-    // Check saved session
-    const savedUser = AuthService.loadSession();
-    if (savedUser) {
-      // Just refresh profile for permissions, no auto-login logic deep check for now
-      // But ideally we should re-verify permissions
-      AuthService.checkPermissionAccess(savedUser.fullName || '', savedUser.email)
-        .then(res => {
+    // Check saved session first to ensure token is ready for fetch
+    const init = async () => {
+      setIsLoading(true);
+      try {
+        const savedUser = AuthService.loadSession();
+        if (savedUser) {
+          // Verify permissions and session
+          const res = await AuthService.checkPermissionAccess(savedUser.fullName || '', savedUser.email);
           if (res) {
             setSession({ user: { id: res.profile.id } } as any);
             setUserProfile(res.profile);
             setIsDeviceVerified(res.isDeviceApproved);
+
             // Permissions
             setUnlockedFolderIds(res.unlockedFolders || []);
-            setUnlockedFileIds(res.unlockedFiles || []); // NEW
+            setUnlockedFileIds(res.unlockedFiles || []);
             DBService.getUserPermissions(res.profile.id).then(setUserPermission);
           } else {
             AuthService.logout(savedUser.id);
           }
-        })
-        .catch(() => savedUser.id && AuthService.logout(savedUser.id));
-    }
+        }
+      } catch (e) {
+        console.error("Session Init Error:", e);
+      } finally {
+        // Fetch data AFTER auth check to ensure RLS policies work if they rely on auth
+        fetchInitialData();
+        setIsLoading(false);
+      }
+    };
+
+    init();
   }, []);
 
   const fetchInitialData = async () => {
-    setFolders(await StorageService.getFolders());
+    try {
+      console.log("Fetching Folders...");
+      const folderData = await StorageService.getFolders();
+      console.log("Folders Fetched:", folderData.length);
+      setFolders(folderData);
+    } catch (err) {
+      console.error("Fetch Initial Data Error:", err);
+      // Don't alert on mobile load, just log. 
+    }
   };
 
   const handleCustomAuth = async (e: React.FormEvent) => {
@@ -118,12 +135,14 @@ const App: React.FC = () => {
 
         if (res.unlockedFiles && res.unlockedFiles.length > 0) {
           setUnlockedFileIds(res.unlockedFiles);
-          // If only files, maybe redirect to Virtual Library? For now, stay on root.
         } else {
           setUnlockedFileIds([]);
         }
 
         DBService.getUserPermissions(res.profile.id).then(setUserPermission);
+
+        // REFRESH DATA AFTER LOGIN to ensure we see everything we're allowed to see
+        await fetchInitialData();
       }
     } catch (err: any) {
       console.error(err);

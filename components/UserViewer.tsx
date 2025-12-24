@@ -216,6 +216,15 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   const [toolMode, setToolMode] = useState<'CURSOR' | 'PEN' | 'HIGHLIGHTER' | 'ERASER'>('CURSOR');
   const [penColor, setPenColor] = useState('#EF4444'); // Red default
 
+  // Auto-switch color for Highlighter
+  useEffect(() => {
+    if (toolMode === 'HIGHLIGHTER') {
+      setPenColor('#F59E0B'); // Switch to Yellow
+    } else if (toolMode === 'PEN' && penColor === '#F59E0B') {
+      setPenColor('#EF4444'); // Switch back to Red if coming from Highlighter
+    }
+  }, [toolMode]);
+
   const [annotations, setAnnotations] = useState<Record<number, AnnotationPath[]>>({});
   const [loadError, setLoadError] = useState(false);
 
