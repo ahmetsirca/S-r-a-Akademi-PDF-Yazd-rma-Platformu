@@ -34,6 +34,15 @@ const App: React.FC = () => {
   const [changeOldPass, setChangeOldPass] = useState('');
   const [changeNewPass, setChangeNewPass] = useState('');
 
+  // Vocabulary State
+  const [showVocabModal, setShowVocabModal] = useState(false);
+  const [vocabList, setVocabList] = useState<import('./types').UserVocab[]>([]);
+  const [newWordEn, setNewWordEn] = useState('');
+  const [newWordTr, setNewWordTr] = useState('');
+  const [vocabMode, setVocabMode] = useState<'LIST' | 'STUDY'>('LIST');
+  const [studyCardIndex, setStudyCardIndex] = useState(0);
+  const [isFlipped, setIsFlipped] = useState(false);
+
   // Folder System State
   const [folders, setFolders] = useState<import('./types').Folder[]>([]);
   const [folderContent, setFolderContent] = useState<import('./types').FolderContent[]>([]);
@@ -163,6 +172,35 @@ const App: React.FC = () => {
     }
   };
 
+
+  const handleOpenVocab = async () => {
+    if (!userProfile) return;
+    setIsLoading(true);
+    const data = await DBService.getVocab(userProfile.id);
+    setVocabList(data);
+    setIsLoading(false);
+    setShowVocabModal(true);
+    setVocabMode('LIST');
+  };
+
+  const handleAddWord = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userProfile || !newWordEn || !newWordTr) return;
+    const { data, error } = await DBService.addVocab(userProfile.id, newWordEn, newWordTr);
+    if (!error && data) {
+      setVocabList([data, ...vocabList]);
+      setNewWordEn('');
+      setNewWordTr('');
+    } else {
+      alert("Hata oluştu.");
+    }
+  };
+
+  const handleDeleteWord = async (id: string) => {
+    if (!confirm('Silmek istiyor musunuz?')) return;
+    await DBService.deleteVocab(id);
+    setVocabList(vocabList.filter(v => v.id !== id));
+  };
 
   const handleLogout = async () => {
     if (userProfile) {
@@ -347,6 +385,13 @@ const App: React.FC = () => {
                           <i className="fas fa-exclamation-triangle mr-1"></i> Yeni Cihaz (Onay Bekliyor)
                         </div>
                       )}
+
+                      <button
+                        onClick={handleOpenVocab}
+                        className="text-xs text-indigo-600 font-bold hover:underline mb-3 block mx-auto bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100"
+                      >
+                        <i className="fas fa-book mr-1"></i> Kelime Defterim
+                      </button>
 
                       <button
                         onClick={() => setShowUserPassChange(!showUserPassChange)}
@@ -782,6 +827,149 @@ const App: React.FC = () => {
           />
         )}
       </main>
+
+      {/* VOCABULARY MODAL */}
+      {showVocabModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+
+            {/* Header */}
+            <div className="p-4 bg-indigo-900 text-white flex justify-between items-center shadow-md">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <i className="fas fa-book-open text-yellow-400"></i> Kelime Defterim
+              </h2>
+              <button
+                onClick={() => setShowVocabModal(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            {/* Navigation Tabs */}
+            <div className="flex bg-indigo-50 border-b border-indigo-100">
+              <button
+                onClick={() => setVocabMode('LIST')}
+                className={`flex-1 py-3 text-sm font-bold transition flex items-center justify-center gap-2 ${vocabMode === 'LIST' ? 'bg-white text-indigo-600 shadow-sm border-t-2 border-indigo-600' : 'text-slate-500 hover:bg-indigo-100'}`}
+              >
+                <i className="fas fa-list"></i> Kelime Listem
+              </button>
+              <button
+                onClick={() => { setVocabMode('STUDY'); setStudyCardIndex(0); setIsFlipped(false); }}
+                className={`flex-1 py-3 text-sm font-bold transition flex items-center justify-center gap-2 ${vocabMode === 'STUDY' ? 'bg-white text-indigo-600 shadow-sm border-t-2 border-indigo-600' : 'text-slate-500 hover:bg-indigo-100'}`}
+              >
+                <i className="fas fa-layer-group"></i> Çalışma Modu (Flashcard)
+              </button>
+            </div>
+
+            {/* CONTENT */}
+            <div className="p-6 overflow-y-auto flex-1 bg-slate-50">
+
+              {/* LIST MODE */}
+              {vocabMode === 'LIST' && (
+                <div>
+                  {/* Add Form */}
+                  <form onSubmit={handleAddWord} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex gap-3 items-end">
+                    <div className="flex-1">
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">İngilizce</label>
+                      <input type="text" className="w-full border p-2 rounded-lg" placeholder="Apple" value={newWordEn} onChange={e => setNewWordEn(e.target.value)} required />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">Türkçe</label>
+                      <input type="text" className="w-full border p-2 rounded-lg" placeholder="Elma" value={newWordTr} onChange={e => setNewWordTr(e.target.value)} required />
+                    </div>
+                    <button className="bg-green-500 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-600 h-[42px]">
+                      <i className="fas fa-plus"></i> Ekle
+                    </button>
+                  </form>
+
+                  {/* List */}
+                  {vocabList.length === 0 ? (
+                    <div className="text-center py-10 text-slate-400">
+                      <i className="fas fa-pencil-alt text-4xl mb-4 opacity-30"></i>
+                      <p>Henüz kelime eklemediniz.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {vocabList.map(v => (
+                        <div key={v.id} className="bg-white p-3 rounded-xl border border-slate-200 flex justify-between items-center group shadow-sm hover:shadow-md transition">
+                          <div>
+                            <p className="font-bold text-indigo-800 text-base">{v.wordEn}</p>
+                            <p className="text-slate-500 text-sm">{v.wordTr}</p>
+                          </div>
+                          <button onClick={() => handleDeleteWord(v.id)} className="w-8 h-8 rounded-full text-slate-300 hover:bg-red-50 hover:text-red-500 transition">
+                            <i className="fas fa-trash"></i>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-center text-xs text-slate-400 mt-6">{vocabList.length} kelime kayıtlı.</p>
+                </div>
+              )}
+
+              {/* STUDY MODE */}
+              {vocabMode === 'STUDY' && (
+                <div className="h-full flex flex-col items-center justify-center">
+                  {vocabList.length === 0 ? (
+                    <p className="text-slate-400">Çalışmak için önce kelime ekleyin.</p>
+                  ) : (
+                    <div className="w-full max-w-sm">
+                      <div className="text-center mb-4 text-slate-500 font-bold text-sm">
+                        Kart {studyCardIndex + 1} / {vocabList.length}
+                      </div>
+
+                      {/* THE CARD */}
+                      <div
+                        onClick={() => setIsFlipped(!isFlipped)}
+                        className="bg-white w-full h-64 rounded-2xl shadow-xl border border-indigo-100 flex items-center justify-center cursor-pointer transition-all hover:-translate-y-1 relative preserve-3d group perspective-1000"
+                      >
+                        <div className="text-center p-6">
+                          <p className="text-xs font-bold text-indigo-300 uppercase mb-2 tracking-widest">{isFlipped ? 'TÜRKÇE' : 'İNGİLİZCE'}</p>
+                          <p className={`text-4xl font-black ${isFlipped ? 'text-green-600' : 'text-indigo-900'}`}>
+                            {isFlipped ? vocabList[studyCardIndex].wordTr : vocabList[studyCardIndex].wordEn}
+                          </p>
+                          <p className="mt-8 text-xs text-slate-300 font-medium group-hover:text-indigo-400 transition">
+                            <i className="fas fa-sync-alt mr-1"></i> Çevirmek için tıkla
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* CONTROLS */}
+                      <div className="flex justify-between mt-8 gap-4">
+                        <button
+                          disabled={studyCardIndex === 0}
+                          onClick={() => { setStudyCardIndex(studyCardIndex - 1); setIsFlipped(false); }}
+                          className="flex-1 bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          <i className="fas fa-arrow-left mr-2"></i> Önceki
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsFlipped(false);
+                            // Random or Next? Let's do Next loop
+                            if (studyCardIndex < vocabList.length - 1) {
+                              setStudyCardIndex(studyCardIndex + 1);
+                            } else {
+                              // Reset to 0
+                              setStudyCardIndex(0);
+                              alert("Tebrikler! Tüm kelimeleri tamamladınız.");
+                            }
+                          }}
+                          className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200"
+                        >
+                          {studyCardIndex < vocabList.length - 1 ? 'Sonraki' : 'Başa Dön'} <i className="fas fa-arrow-right ml-2"></i>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       {

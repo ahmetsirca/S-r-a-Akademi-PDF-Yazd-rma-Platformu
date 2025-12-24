@@ -84,4 +84,12 @@ export interface ActivityLog {
 
 export type ViewState = 'USER_LOGIN' | 'USER_VIEWER' | 'ADMIN_LOGIN' | 'ADMIN_DASHBOARD' | 'USER_FOLDER_VIEW';
 
+export interface UserVocab {
+  id: string;
+  userId: string;
+  wordEn: string;
+  wordTr: string;
+  createdAt: string;
+}
+
 

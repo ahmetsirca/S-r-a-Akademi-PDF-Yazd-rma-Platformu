@@ -56,3 +56,12 @@ create table folder_keys (
   expires_at timestamp with time zone,
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
+
+-- USER VOCABULARY (Flashcards)
+create table user_vocab (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references profiles(id) on delete cascade not null,
+  word_en text not null,
+  word_tr text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now())
+);

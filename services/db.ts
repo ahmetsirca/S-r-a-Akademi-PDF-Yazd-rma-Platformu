@@ -65,6 +65,23 @@ export const DBService = {
     }
   },
 
+  // --- VOCABULARY ---
+  async getVocab(userId: string) {
+    let { data, error } = await supabase.from('user_vocab').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+    if (error) { console.error(error); return []; }
+    return data as import('../types').UserVocab[];
+  },
+
+  async addVocab(userId: string, en: string, tr: string) {
+    let { data, error } = await supabase.from('user_vocab').insert({ user_id: userId, word_en: en, word_tr: tr }).select().single();
+    return { data, error };
+  },
+
+  async deleteVocab(vocabId: string) {
+    let { error } = await supabase.from('user_vocab').delete().eq('id', vocabId);
+    return { error };
+  },
+
   // --- LOGS ---
   async logActivity(userId: string, actionType: string, targetId: string | null, details: string | null) {
     await supabase.from('activity_logs').insert({
