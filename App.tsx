@@ -127,7 +127,8 @@ const App: React.FC = () => {
 
         if (res.unlockedFolders.length > 0) {
           setUnlockedFolderIds(res.unlockedFolders);
-          setView('USER_FOLDER_VIEW');
+          // Do NOT switch to USER_FOLDER_VIEW automatically. 
+          // Stay on USER_LOGIN (Dashboard) so user sees the list of folders.
         } else {
           // No folders assigned yet. Still allow login but show root.
           setUnlockedFolderIds([]);
