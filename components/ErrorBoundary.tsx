@@ -1,0 +1,52 @@
+import React, { Component, ErrorInfo, ReactNode } from 'react';
+
+interface Props {
+    children: ReactNode;
+}
+
+interface State {
+    hasError: boolean;
+    error: Error | null;
+}
+
+export class ErrorBoundary extends Component<Props, State> {
+    public state: State = {
+        hasError: false,
+        error: null
+    };
+
+    public static getDerivedStateFromError(error: Error): State {
+        return { hasError: true, error };
+    }
+
+    public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+        console.error("Uncaught error:", error, errorInfo);
+    }
+
+    public render() {
+        if (this.state.hasError) {
+            return (
+                <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center font-sans">
+                    <div className="w-20 h-20 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-6 text-3xl">
+                        <i className="fas fa-bug"></i>
+                    </div>
+                    <h1 className="text-2xl font-bold text-slate-800 mb-2">Bir Hata Oluştu</h1>
+                    <p className="text-slate-600 mb-6 max-w-md">
+                        Uygulama beklenmedik bir hatayla karşılaştı. İnternet bağlantınızdan veya geçici bir sorundan kaynaklanıyor olabilir.
+                    </p>
+                    <div className="bg-white p-4 rounded border border-slate-200 text-left text-xs text-red-500 font-mono mb-6 w-full max-w-md overflow-auto max-h-32">
+                        {this.state.error?.toString()}
+                    </div>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition"
+                    >
+                        Sayfayı Yenile
+                    </button>
+                </div>
+            );
+        }
+
+        return this.props.children;
+    }
+}

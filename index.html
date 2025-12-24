@@ -10,7 +10,52 @@
 </head>
 
 <body class="bg-slate-50 text-slate-900">
-  <div id="root"></div>
+  <div id="root">
+    <!-- Initial Loader -->
+    <div id="initial-loader"
+      style="position:fixed;top:0;left:0;width:100%;height:100%;background:#f8fafc;display:flex;justify-content:center;align-items:center;z-index:9999;transition:opacity 0.5s;">
+      <div style="text-align:center;font-family:sans-serif;color:#475569;">
+        <div style="font-size:30px;margin-bottom:10px;">
+          <i class="fas fa-circle-notch fa-spin" style="color:#2563eb;"></i>
+        </div>
+        <div>Yükleniyor...</div>
+      </div>
+    </div>
+
+    <!-- Crash Handler Script -->
+    <script>
+      window.addEventListener('load', function () {
+        const loader = document.getElementById('initial-loader');
+        // Hide loader when React mounts (React will clear innerHTML of root, but loader is inside root? No, better place separate)
+        // Actually react clears root. So putting loader inside root is good because React removes it automatically.
+        // But if React FAILS, loader stays!
+
+        // Timeout to detect crash
+        setTimeout(function () {
+          // If loader is still there and React hasn't taken over (root has child nodes that are THE LOADER)
+          if (loader && document.body.contains(loader)) {
+            loader.innerHTML = '<div style="color:#ef4444;padding:20px;max-width:300px;">' +
+              '<h3 style="font-size:18px;font-weight:bold;margin-bottom:8px;">Bağlantı Hatası</h3>' +
+              '<p style="font-size:14px;margin-bottom:16px;">Uygulama yüklenirken bir sorun oluştu. İnternet bağlantınız zayıf olabilir.</p>' +
+              '<button onclick="window.location.reload()" style="background:#2563eb;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;">Tekrar Dene</button>' +
+              '</div>';
+          }
+        }, 8000); // 8 seconds timeout
+      });
+
+      window.onerror = function () {
+        // Global error (syntax, blocking)
+        const loader = document.getElementById('initial-loader');
+        if (loader) {
+          loader.innerHTML = '<div style="color:#ef4444;padding:20px;max-width:300px;">' +
+            '<h3 style="font-size:18px;font-weight:bold;margin-bottom:8px;">Kritik Hata</h3>' +
+            '<p style="font-size:14px;margin-bottom:16px;">Sayfa yüklenemedi. Lütfen yenileyin.</p>' +
+            '<button onclick="window.location.reload()" style="background:#2563eb;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;">Yenile</button>' +
+            '</div>';
+        }
+      };
+    </script>
+  </div>
   <script type="module" src="/index.tsx"></script>
 </body>
 
