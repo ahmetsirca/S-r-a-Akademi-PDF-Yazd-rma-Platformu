@@ -182,7 +182,7 @@ export const AuthService = {
         let ipAddress = '0.0.0.0';
         try {
             const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), 3000); // 3s timeout
+            const id = setTimeout(() => controller.abort(), 1000); // 1s timeout
             const ipRes = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
             clearTimeout(id);
             const ipJson = await ipRes.json();
@@ -266,7 +266,7 @@ export const AuthService = {
         let ipAddress = '0.0.0.0';
         try {
             const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), 3000);
+            const id = setTimeout(() => controller.abort(), 1000);
             const ipRes = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
             clearTimeout(id);
             const ipJson = await ipRes.json();

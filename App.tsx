@@ -11,6 +11,7 @@ const App: React.FC = () => {
   // Navigation State
   const [view, setView] = useState<ViewState>('USER_LOGIN');
   const [isLoading, setIsLoading] = useState(false);
+  const [connectionError, setConnectionError] = useState(false);
 
   // Auth State
   const [session, setSession] = useState<Session | null>(null);
@@ -59,6 +60,7 @@ const App: React.FC = () => {
     // Check saved session first to ensure token is ready for fetch
     const init = async () => {
       setIsLoading(true);
+      setConnectionError(false);
       try {
         const savedUser = AuthService.loadSession();
         if (savedUser) {
@@ -79,9 +81,10 @@ const App: React.FC = () => {
         }
       } catch (e) {
         console.error("Session Init Error:", e);
+        setConnectionError(true);
       } finally {
         // Fetch data AFTER auth check to ensure RLS policies work if they rely on auth
-        fetchInitialData();
+        await fetchInitialData();
         setIsLoading(false);
       }
     };
@@ -95,9 +98,11 @@ const App: React.FC = () => {
       const folderData = await StorageService.getFolders();
       console.log("Folders Fetched:", folderData.length);
       setFolders(folderData);
+      setConnectionError(false);
     } catch (err) {
       console.error("Fetch Initial Data Error:", err);
       // Don't alert on mobile load, just log. 
+      setConnectionError(true);
     }
   };
 
@@ -274,6 +279,25 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
+      {/* Connection Error Overlay */}
+      {connectionError && (
+        <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center animate-fade-in">
+          <div className="w-20 h-20 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-6 text-3xl">
+            <i className="fas fa-wifi-slash"></i>
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Bağlantı Hatası</h2>
+          <p className="text-slate-500 max-w-sm mb-8">
+            İnternet bağlantınız zayıf veya sunucuya erişilemiyor. Lütfen internetinizi kontrol edip tekrar deneyin.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition active:scale-95"
+          >
+            Tekrar Dene
+          </button>
+        </div>
+      )}
+
       {/* Nav */}
       {view !== 'USER_VIEWER' && (
         <nav className="p-4 flex justify-between items-center bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
