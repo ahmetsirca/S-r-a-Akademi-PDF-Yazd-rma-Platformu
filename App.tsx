@@ -390,7 +390,7 @@ const App: React.FC = () => {
                         onClick={handleOpenVocab}
                         className="text-xs text-indigo-600 font-bold hover:underline mb-3 block mx-auto bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100"
                       >
-                        <i className="fas fa-book mr-1"></i> Kelime Defterim
+                        <i className="fas fa-book mr-1"></i> Misyon Koruma İngilizce ve YDS Kelime Defterim
                       </button>
 
                       <button
@@ -836,7 +836,7 @@ const App: React.FC = () => {
             {/* Header */}
             <div className="p-4 bg-indigo-900 text-white flex justify-between items-center shadow-md">
               <h2 className="text-lg font-bold flex items-center gap-2">
-                <i className="fas fa-book-open text-yellow-400"></i> Kelime Defterim
+                <i className="fas fa-book-open text-yellow-400"></i> Misyon Koruma İngilizce ve YDS Kelime Defterim
               </h2>
               <button
                 onClick={() => setShowVocabModal(false)}
