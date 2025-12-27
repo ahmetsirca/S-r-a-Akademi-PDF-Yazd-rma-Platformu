@@ -300,14 +300,24 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
 
                             setLoading(true);
                             try {
-                                let targetNb = notebooks.find(n => n.title === 'Genel (Eski)');
+                                console.log("Manual Restore Started. Fetching fresh notebooks...");
+                                // 1. Fresh Fetch to ensure we see existing notebooks
+                                const freshNotebooks = await DBService.getNotebooks(userId);
+                                let targetNb = freshNotebooks.find(n => n.title === 'Genel (Eski)');
+
                                 if (!targetNb) {
+                                    console.log("Notebook not found. Attempting creation...");
                                     const newNb = await DBService.createNotebook(userId, 'Genel (Eski)');
-                                    targetNb = newNb || undefined; // Fix: handling null by converting to undefined if needed or ensuring type match
+                                    if (newNb) {
+                                        targetNb = newNb;
+                                    } else {
+                                        console.error("Create failed returning null");
+                                        throw new Error("Defter veritabanında oluşturulamadı. (DB Insert Failed)");
+                                    }
                                 }
 
                                 if (targetNb) {
-                                    console.log("Starting Manual Restore...");
+                                    console.log("Target Notebook:", targetNb);
                                     let count = 0;
 
                                     // 1. Try DB
@@ -319,22 +329,21 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
                                         }
                                     }
 
-                                    // 2. Try Backup List (Always run this for safety in manual mode to ensure specific words exist)
-                                    // We should maybe check duplicates? For now just add, user can delete.
-                                    // actually getNotebookWords to check duplicates is better but let's just add to ensure presence.
+                                    // 2. Try Backup List (Always run this for safety)
+                                    // Duplicates will be allowed or handled by DB (no unique constraint on words currently effectively)
                                     for (const w of BACKUP_VOCAB_LIST) {
                                         await DBService.addNotebookWord(targetNb.id, w.term, w.definition);
                                         count++;
                                     }
 
-                                    alert(`İşlem Tamamlandı! ${count} kelime kontrol edildi ve yüklendi.`);
+                                    alert(`BAŞARILI! ${count} adet kelime 'Genel (Eski)' defterine başarıyla eklendi.\nLütfen kontrol ediniz.`);
                                     loadNotebooks();
                                 } else {
-                                    alert("Defter oluşturulamadı. Lütfen sayfayı yenileyip tekrar deneyin.");
+                                    throw new Error("Defter oluşturulamadı (Target is null)");
                                 }
-                            } catch (e) {
-                                console.error(e);
-                                alert("Bir hata oluştu.");
+                            } catch (e: any) {
+                                console.error("Restore Error:", e);
+                                alert(`HATA OLUŞTU:\n${e.message || e}\nLütfen geliştirici ile iletişime geçin.`);
                             } finally {
                                 setLoading(false);
                             }
