@@ -4,6 +4,7 @@ import { StorageService } from './services/storage';
 import { DBService } from './services/db';
 import { AuthService } from './services/auth';
 const AdminDashboard = React.lazy(() => import('./components/AdminDashboard'));
+const FlashcardMode = React.lazy(() => import('./components/FlashcardMode'));
 import UserViewer from './components/UserViewer';
 import VocabularyNotebook from './components/VocabularyNotebook';
 import { Session } from '@supabase/supabase-js';
@@ -390,7 +391,9 @@ const App: React.FC = () => {
               </button>
             </div>
             <div className="flex-1 overflow-auto">
-              <import('./components/FlashcardMode').default notebookId={publicNotebookId} />
+              <React.Suspense fallback={<div className="p-10 text-center">Yükleniyor...</div>}>
+                <FlashcardMode notebookId={publicNotebookId} />
+              </React.Suspense>
             </div>
           </div>
         )}
