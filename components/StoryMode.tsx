@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { VocabStory, VocabWord } from '../types';
 import { DBService } from '../services/db';
+import { jsPDF } from 'jspdf';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
+import { saveAs } from 'file-saver';
 
 interface StoryModeProps {
     notebookId: string;
@@ -18,13 +21,20 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
     const [translation, setTranslation] = useState<string | null>(null);
     const viewerRef = useRef<HTMLDivElement>(null);
 
+    // Feature State
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [showShareMenu, setShowShareMenu] = useState(false);
+
     useEffect(() => {
         loadData();
     }, [notebookId]);
 
     // Clear popover on click outside
     useEffect(() => {
-        const handleClick = () => setPopover(null);
+        const handleClick = () => {
+            setPopover(null);
+            setShowShareMenu(false);
+        };
         document.addEventListener('mousedown', handleClick);
         return () => document.removeEventListener('mousedown', handleClick);
     }, []);
@@ -81,10 +91,12 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                     }, 2000);
                 }
                 if (!editingId) {
-                    setTitle('');
-                    setContent('');
+                    // Only clear if not editing, OR if we want to reset after update?
+                    // User might want to keep editing after save.
+                    // Let's keep it for now but maybe change UX later.
+                    // Actually usually after save we want to keep editing the same doc.
                 }
-                setEditingId(null);
+                // setEditingId(null); // Keep in edit mode after save
                 loadData();
             }
         } catch (e: any) {
@@ -115,6 +127,11 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
         if (!confirm('Hikayeyi silmek istiyor musunuz?')) return;
         await DBService.deleteStory(id);
         setStories(stories.filter(s => s.id !== id));
+        if (editingId === id) {
+            setEditingId(null);
+            setTitle('');
+            setContent('');
+        }
     };
 
     const speak = (text: string) => {
@@ -125,6 +142,72 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             window.speechSynthesis.speak(utterance);
         }
     };
+
+    // --- EXPORT FEATURES ---
+    const exportPDF = () => {
+        const doc = new jsPDF();
+
+        // Font setup (Basic, for serious Turkish support need custom font in jsPDF but default supports basics usually)
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(20);
+        doc.text(title || 'Adsız Hikaye', 105, 20, { align: 'center' });
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(12);
+
+        const splitText = doc.splitTextToSize(content, 170);
+        doc.text(splitText, 20, 40);
+
+        doc.save(`${title || 'hikaye'}.pdf`);
+    };
+
+    const exportWord = () => {
+        const doc = new Document({
+            sections: [{
+                properties: {},
+                children: [
+                    new Paragraph({
+                        text: title || 'Adsız Hikaye',
+                        heading: HeadingLevel.HEADING_1,
+                    }),
+                    new Paragraph({
+                        text: content,
+                        spacing: { before: 400 }
+                    }),
+                ],
+            }],
+        });
+
+        Packer.toBlob(doc).then(blob => {
+            saveAs(blob, `${title || 'hikaye'}.docx`);
+        });
+    };
+
+    const shareStory = (platform: string) => {
+        const shareText = `"${title}" - Sırça Akademi'de yazdığım hikayeyi oku!`;
+        const shareUrl = window.location.href; // Or a specific public link if available later
+
+        let url = '';
+        switch (platform) {
+            case 'twitter':
+                url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`;
+                break;
+            case 'whatsapp':
+                url = `https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`;
+                break;
+            case 'telegram':
+                url = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`;
+                break;
+            case 'copy':
+                navigator.clipboard.writeText(`${shareText} ${shareUrl}`);
+                alert("Link kopyalandı!");
+                return;
+        }
+
+        if (url) window.open(url, '_blank');
+        setShowShareMenu(false);
+    };
+
 
     // Handle Text Selection
     const handleMouseUp = (e: React.MouseEvent) => {
@@ -142,7 +225,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             setPopover({
                 x: rect.left + (rect.width / 2),
                 y: rect.top - 10,
-                text: selection.toString()
+                text: selection.toString() // Standard coordinate, will be fixed by viewer
             });
             setTranslation(null);
         }
@@ -188,11 +271,14 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
     };
 
     return (
-        <div className="grid md:grid-cols-2 gap-6 h-auto md:h-[600px] relative">
+        <div className={`grid md:grid-cols-2 gap-6 relative transition-all duration-300 ${isFullscreen ? 'fixed inset-0 z-50 bg-white p-6' : 'h-auto md:h-[600px]'}`}>
             {/* Popover */}
             {popover && (
                 <div
                     className="fixed z-[9999] bg-slate-800 text-white p-2 rounded-lg shadow-xl flex flex-col items-center gap-2 transform -translate-x-1/2 -translate-y-full animate-fade-in"
+                    // Use pageX/Y if absolute to document, but for fixed we need clientX.
+                    // Previously logic might be flawed for fixed.
+                    // For simplicity let's stick to calculated logic but ensure z-index is high.
                     style={{ left: popover.x, top: popover.y }}
                     onMouseDown={(e) => e.stopPropagation()} // Prevent close on interaction
                 >
@@ -221,23 +307,40 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             )}
 
             {/* Left: Story List & Editor */}
-            <div className="flex flex-col gap-4 h-full min-h-[400px]">
+            <div className={`flex flex-col gap-4 h-full ${isFullscreen ? 'hidden' : 'min-h-[400px]'}`}>
                 {/* Editor */}
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col">
-                    <input
-                        type="text"
-                        placeholder="Hikaye Başlığı"
-                        className="w-full text-lg font-bold mb-4 p-2 border-b border-transparent focus:border-blue-500 outline-none"
-                        value={title}
-                        onChange={e => setTitle(e.target.value)}
-                    />
+                    <div className="flex justify-between items-center mb-4">
+                        <input
+                            type="text"
+                            placeholder="Hikaye Başlığı"
+                            className="w-full text-lg font-bold p-2 border-b border-transparent focus:border-blue-500 outline-none"
+                            value={title}
+                            onChange={e => setTitle(e.target.value)}
+                        />
+                        {editingId && (
+                            <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded ml-2 whitespace-nowrap">
+                                Düzenleniyor
+                            </span>
+                        )}
+                    </div>
+
                     <textarea
                         className="w-full flex-1 p-2 resize-none outline-none text-slate-700 leading-relaxed min-h-[200px]"
                         placeholder="Hikayeni buraya yaz... Kullandığın kelimeler otomatik olarak vurgulanacak."
                         value={content}
                         onChange={e => setContent(e.target.value)}
                     />
-                    <div className="flex justify-end pt-4">
+                    <div className="flex justify-between pt-4">
+                        {editingId && (
+                            <button
+                                onClick={() => { setEditingId(null); setTitle(''); setContent(''); }}
+                                className="text-slate-500 text-sm hover:underline"
+                            >
+                                Yeni Hikaye
+                            </button>
+                        )}
+                        <div className="flex-1"></div>
                         <button
                             id="save-btn"
                             onClick={handleSave}
@@ -253,7 +356,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                     <h3 className="font-bold text-slate-700 mb-2 text-sm uppercase">Kayıtlı Hikayeler</h3>
                     <div className="space-y-2">
                         {stories.map(s => (
-                            <div key={s.id} className="flex justify-between items-center p-2 hover:bg-slate-50 rounded cursor-pointer group" onClick={() => handleEdit(s)}>
+                            <div key={s.id} className={`flex justify-between items-center p-2 rounded cursor-pointer group transition ${editingId === s.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-slate-50'}`} onClick={() => handleEdit(s)}>
                                 <span className="font-medium text-slate-800 truncate flex-1">{s.title}</span>
                                 <button
                                     onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}
@@ -271,12 +374,52 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             <div
                 ref={viewerRef}
                 onMouseUp={handleMouseUp}
-                className="bg-slate-50 p-6 rounded-xl border border-slate-200 shadow-inner h-full min-h-[400px] overflow-auto select-text"
+                className={`bg-slate-50 p-6 rounded-xl border border-slate-200 shadow-inner overflow-auto select-text flex flex-col ${isFullscreen ? 'h-full max-w-4xl mx-auto shadow-2xl scale-100' : 'h-full min-h-[400px]'}`}
             >
+                {/* Toolbar */}
+                <div className="flex justify-end gap-2 mb-4 border-b border-slate-200 pb-2">
+                    <div className="relative">
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setShowShareMenu(!showShareMenu); }}
+                            className="text-slate-400 hover:text-blue-600 p-2 rounded hover:bg-blue-50 transition" title="Paylaş">
+                            <i className="fas fa-share-alt"></i>
+                        </button>
+
+                        {/* Share Menu */}
+                        {showShareMenu && (
+                            <div className="absolute right-0 top-full mt-2 w-40 bg-white shadow-xl rounded-xl border border-slate-100 z-50 p-1 flex flex-col animate-fade-in" onMouseDown={e => e.stopPropagation()}>
+                                <button onClick={() => shareStory('twitter')} className="px-3 py-2 text-left hover:bg-slate-50 rounded text-sm font-bold text-slate-700 flex items-center gap-2">
+                                    <i className="fab fa-twitter text-blue-400"></i> X / Twitter
+                                </button>
+                                <button onClick={() => shareStory('whatsapp')} className="px-3 py-2 text-left hover:bg-slate-50 rounded text-sm font-bold text-slate-700 flex items-center gap-2">
+                                    <i className="fab fa-whatsapp text-green-500"></i> WhatsApp
+                                </button>
+                                <button onClick={() => shareStory('telegram')} className="px-3 py-2 text-left hover:bg-slate-50 rounded text-sm font-bold text-slate-700 flex items-center gap-2">
+                                    <i className="fab fa-telegram text-blue-500"></i> Telegram
+                                </button>
+                                <button onClick={() => shareStory('copy')} className="px-3 py-2 text-left hover:bg-slate-50 rounded text-sm font-bold text-slate-700 flex items-center gap-2">
+                                    <i className="fas fa-link text-slate-500"></i> Linki Kopyala
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    <button onClick={exportPDF} className="text-slate-400 hover:text-red-600 p-2 rounded hover:bg-red-50 transition" title="PDF İndir">
+                        <i className="fas fa-file-pdf"></i>
+                    </button>
+                    <button onClick={exportWord} className="text-slate-400 hover:text-blue-700 p-2 rounded hover:bg-blue-50 transition" title="Word İndir">
+                        <i className="fas fa-file-word"></i>
+                    </button>
+                    <div className="w-px bg-slate-300 mx-1 h-6 self-center"></div>
+                    <button onClick={() => setIsFullscreen(!isFullscreen)} className="text-slate-400 hover:text-slate-800 p-2 rounded hover:bg-slate-200 transition" title="Tam Ekran">
+                        <i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'}`}></i>
+                    </button>
+                </div>
+
                 {title || content ? (
-                    <article className="prose prose-slate max-w-none">
-                        <h2 className="text-2xl font-bold text-slate-800 mb-4">{title || 'Başlıksız Hikaye'}</h2>
-                        <div className="text-lg leading-loose text-slate-700">
+                    <article className="prose prose-slate max-w-none flex-1">
+                        <h2 className="text-2xl font-bold text-slate-800 mb-4 text-center">{title || 'Başlıksız Hikaye'}</h2>
+                        <div className="text-lg leading-loose text-slate-700 font-serif">
                             {renderInteractiveContent(content)}
                         </div>
                     </article>
