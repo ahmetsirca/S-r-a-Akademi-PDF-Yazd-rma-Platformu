@@ -23,8 +23,8 @@ interface AnnotationPath {
 
 interface SinglePDFPageProps {
   pageNumber: number;
-  scale: number;
-  width: number;
+  width: number;       // The High-Res Render Width
+  displayScale: number; // The CSS Scale Factor
   toolMode: 'CURSOR' | 'PEN' | 'HIGHLIGHTER' | 'ERASER';
   penColor: string;
   annotations: AnnotationPath[];
@@ -33,7 +33,7 @@ interface SinglePDFPageProps {
   devicePixelRatio?: number;
 }
 
-const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width, toolMode, penColor, annotations, onAnnotationAdd, onPageLoad, devicePixelRatio }) => {
+const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, width, displayScale, toolMode, penColor, annotations, onAnnotationAdd, onPageLoad, devicePixelRatio }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
   const currentPath = useRef<{ x: number, y: number }[]>([]);
@@ -157,39 +157,61 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, scale, width,
       for (let i = 1; i < ann.points.length; i++) ctx.lineTo(ann.points[i].x, ann.points[i].y);
       ctx.stroke();
     });
-  }, [annotations, scale, width]);
+  }, [annotations, width, displayScale]);
 
   const handlePageLoadSuccess = (page: any) => {
+    // page.originalHeight/Width are PDF points
+    // We rendered at 'width' pixels.
+    // Height in pixels:
     const renderedHeight = page.originalHeight * (width / page.originalWidth);
     onPageLoad(pageNumber, renderedHeight);
   };
 
+  // We define the layout size (Visual) and the Render size (Internal)
+  // width = Internal Render Width (High Res)
+  // displayScale = scaling down/up to fit screen
+  // Layout Width = width * displayScale
+
   return (
-    <div className="relative shadow-lg group w-full" style={{ minHeight: width * 1.4 }}>
-      <Page
-        pageNumber={pageNumber}
-        width={width}
-        scale={scale}
-        devicePixelRatio={devicePixelRatio} // Apply cap
-        renderAnnotationLayer={false}
-        renderTextLayer={true}
-        onLoadSuccess={handlePageLoadSuccess}
-        onRenderError={(err) => console.error(`Page ${pageNumber} Render Error:`, err)}
-        loading={<div className="bg-white animate-pulse w-full" style={{ height: width * 1.41 }} />}
-        error={<div className="flex items-center justify-center text-red-400 h-96">Sayfa Yüklenemedi</div>}
-      />
-      {/* Canvas moved outside Page component to ensure it sits on top of TextLayer */}
-      <canvas
-        ref={canvasRef}
-        className={`absolute inset-0 z-[100] ${toolMode === 'CURSOR' ? 'pointer-events-none' : 'cursor-crosshair touch-none'}`}
-        onMouseDown={startDrawing}
-        onMouseMove={draw}
-        onMouseUp={stopDrawing}
-        onMouseLeave={stopDrawing}
-        onTouchStart={startDrawing}
-        onTouchMove={draw}
-        onTouchEnd={stopDrawing}
-      />
+    <div className="relative shadow-lg group origin-top-left"
+      style={{
+        width: width * displayScale,
+        minHeight: width * 1.4 * displayScale // Placeholder approximation
+      }}>
+
+      {/* High-Res Content Container with Transform */}
+      <div
+        className="origin-top-left"
+        style={{
+          width: width,
+          transform: `scale(${displayScale})`
+        }}
+      >
+        <Page
+          pageNumber={pageNumber}
+          width={width}
+          scale={1.0} // Render at exactly 'width'
+          devicePixelRatio={devicePixelRatio}
+          renderAnnotationLayer={false}
+          renderTextLayer={true}
+          onLoadSuccess={handlePageLoadSuccess}
+          onRenderError={(err) => console.error(`Page ${pageNumber} Render Error:`, err)}
+          loading={<div className="bg-white w-full" style={{ height: width * 1.41 }} />} // Removed pulse for stability
+          error={<div className="flex items-center justify-center text-red-400 h-96">Sayfa Yüklenemedi</div>}
+        />
+        {/* Canvas moved outside Page component to ensure it sits on top of TextLayer */}
+        <canvas
+          ref={canvasRef}
+          className={`absolute inset-0 z-[100] ${toolMode === 'CURSOR' ? 'pointer-events-none' : 'cursor-crosshair touch-none'}`}
+          onMouseDown={startDrawing}
+          onMouseMove={draw}
+          onMouseUp={stopDrawing}
+          onMouseLeave={stopDrawing}
+          onTouchStart={startDrawing}
+          onTouchMove={draw}
+          onTouchEnd={stopDrawing}
+        />
+      </div>
     </div>
   );
 };
@@ -384,33 +406,10 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         let newScrollTop = (oldScrollTop + fy) * ratio - fy;
         const newScrollLeft = (oldScrollLeft + fx) * ratio - fx;
 
-        // --- STRICT BOUNDARY CLAMPING ---
-        // Ensure we don't accidentally scroll to another page
-        const pageEl = document.getElementById(`page-${currentPage}`);
-        if (pageEl) {
-          const pageTop = pageEl.offsetTop;
-          const pageBottom = pageTop + pageEl.clientHeight;
-          const viewHeight = containerRef.current.clientHeight;
-
-          // Max valid scroll top: Page Bottom - View Height (if page is taller)
-          const maxScroll = Math.max(pageTop, pageBottom - viewHeight);
-          const minScroll = pageTop;
-
-          // Allow scrolling within the page, but HARD CLAMP to page edges
-
-          // If the new scroll top puts the Top of the view ABOVE the page top:
-          if (newScrollTop < pageTop) newScrollTop = pageTop;
-
-          // If the new scroll top puts the Bottom of the view BELOW the page bottom:
-          if (newScrollTop > maxScroll) {
-            // But if page fits in view?
-            if (pageEl.clientHeight < viewHeight) {
-              newScrollTop = pageTop; // Center/Top align
-            } else {
-              newScrollTop = maxScroll;
-            }
-          }
-        }
+        // REMOVED STRICT BOUNDARY CLAMPING for vertical scroll freedom
+        // But we might want some horizontal clamping if needed?
+        // Layout 'w-fit mx-auto' handles horizontal centering effectively.
+        // Vertical, we just let it be.
 
         // Apply Scroll immediately
         containerRef.current.scrollTop = newScrollTop;
@@ -602,34 +601,9 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     if (rAFRef.current === null) { // Only schedule if not already scheduled
       rAFRef.current = requestAnimationFrame(() => {
 
-        // --- SCROLL TRAP (Zoom Lock) ---
-        // If zoomed in, prevent scrolling to other pages
-        if (scale > 1.05 && containerRef.current) {
-          const pageEl = document.getElementById(`page-${currentPage}`);
-          if (pageEl) {
-            const top = pageEl.offsetTop;
-            const bottom = top + pageEl.clientHeight;
-            const viewHeight = containerRef.current.clientHeight;
-
-            // Clamp Top
-            if (currentScrollY < top) {
-              containerRef.current.scrollTop = top;
-            }
-            // Clamp Bottom
-            else if (currentScrollY > bottom - viewHeight && pageEl.clientHeight > viewHeight) {
-              // If page is taller than view, clamp to bottom edge
-              containerRef.current.scrollTop = bottom - viewHeight;
-            }
-            // If page is shorter than view, center it? or just clamp top
-            else if (pageEl.clientHeight <= viewHeight) {
-              // Keep it generally in view or let it align top
-              if (currentScrollY > top) containerRef.current.scrollTop = top;
-            }
-          }
-          // Do NOT update page tracking if locked (we are locked to this page anyway)
-          rAFRef.current = null;
-          return;
-        }
+        // --- SCROLL TRAP REMOVED ---
+        // User requested ability to scroll to other pages while zoomed.
+        // We only track the current page for virtualization purposes.
 
         updateCurrentPage();
         rAFRef.current = null; // Reset the ref after execution
@@ -877,9 +851,23 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   }, []);
 
   // Calculate generic page width/height for placeholders
+  // RENDER SCALE: Fixed High Quality (e.g., 1.5x or 2.0x base) for crisp text without re-renders
+  const RENDER_QUALITY = 1.5;
   const getPageWidth = () => containerWidth > 0 ? Math.min(containerWidth - 32, 1000) : 800;
-  const renderedWidth = getPageWidth() * scale;
-  const estimatedHeight = renderedWidth * 1.414;
+
+  // The actual pixels we render into the canvas (High Res)
+  const renderedWidth = getPageWidth() * RENDER_QUALITY;
+
+  // The CSS scale applied to show the user the correct size
+  // If user wants 3.0x zoom, and we rendered at 1.5x, we need Display Scale 2.0x.
+  // Formula: UserScale / RenderQuality
+  const displayScale = scale / RENDER_QUALITY;
+
+  // Layout Height for Virtualization (This must match the VISUAL height in DOM)
+  // pageHeights stores the HIGH RES height (from onPageLoad)
+  // So visual height = highResHeight * displayScale
+
+  const estimatedHeight = (renderedWidth * 1.414) * displayScale;
 
   return (
     <div
@@ -1050,148 +1038,143 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
                   const pageNum = index + 1;
                   // Virtualization: Window size 10 to ensure pages are always ready
                   const isVisible = Math.abs(pageNum - currentPage) <= 10;
-                  const height = pageHeights[pageNum] || estimatedHeight;
+
+                  // Height Logic: pageHeights has High-Res Height. Convert to Visual.
+                  const highResHeight = pageHeights[pageNum];
+                  const visualHeight = highResHeight ? highResHeight * displayScale : estimatedHeight;
 
                   // Zoom Isolation Style
                   // If zoomed, hide others or dim them.
                   const isZoomed = scale > 1.05;
                   const isCurrent = pageNum === currentPage;
 
-                  // If zoomed and NOT current, hide to prevent distraction (and improve performance)
-                  // But keep layout space using 'invisible' or just allow them to be there but dimmed?
-                  // User said: "Çerçeve alsın" -> Frame it. "Başka sayfalara atlamasın" -> Trap.
-                  // If we use the Scroll Trap above, we don't strictly need to hide them, but visual focus helps.
-
-                  const wrapperStyle = isZoomed
-                    ? (isCurrent
-                      ? "opacity-100 ring-4 ring-blue-500/50 shadow-[0_0_100px_rgba(0,0,0,0.5)] z-10" // Focused
-                      : "opacity-10 blur-sm grayscale pointer-events-none") // Background
-                    : "opacity-100";
+                  const wrapperStyle = isZoomed && isCurrent
+                    ? "shadow-[0_0_100px_rgba(0,0,0,0.5)] z-10"
+                    : "opacity-100"; // Removed dimming to allow seeing neighbor pages
 
                   return (
                     <div
                       key={pageNum}
                       id={`page-${pageNum}`}
                       className={`relative w-fit mx-auto transition-all duration-300 mb-4 pdf-page-wrapper ${wrapperStyle}`}
-                      style={{ minHeight: height }}
+                      style={{ minHeight: visualHeight }}
                     >
                       {isVisible ? (
                         <SinglePDFPage
                           pageNumber={pageNum}
-                          scale={scale}
-                          width={renderedWidth}
+                          width={renderedWidth} // Pass Fixed High-Res Width
+                          displayScale={displayScale} // Pass CSS Scale
                           toolMode={toolMode}
                           penColor={penColor}
                           annotations={annotations[pageNum] || []}
                           onAnnotationAdd={addAnnotation}
                           onPageLoad={handlePageLoad}
-                          devicePixelRatio={Math.min(window.devicePixelRatio || 1, 2)} // Cap DPI to 2 to prevent mobile canvas crash
+                          devicePixelRatio={1} // Cap to 1 since we handle scaling manually via width
                         />
                       ) : (
-                        <div className="bg-slate-400/20 rounded-lg animate-pulse flex items-center justify-center text-slate-400 font-bold text-2xl" style={{ height: height, width: renderedWidth }}>
+                        <div className="bg-slate-400/20 rounded-lg animate-pulse flex items-center justify-center text-slate-400 font-bold text-2xl" style={{ height: visualHeight, width: renderedWidth * displayScale }}>
                           {pageNum}
                         </div>
                       )}
-                    </div>
-                  );
+                      );
                 })}
-              </Document>
-            )
+                    </Document>
+                  )
           ) : <div className="text-white">Dosya hazırlanıyor...</div>}
-        </div> {/* End Inner Wrapper */}
-      </div>
+                <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/20 to-transparent pointer-events-none md:hidden" /> {/* Mobile shadow hint */}
+              </div> {/* End Inner Wrapper */}
+        </div>
 
-      {/* Current Page Indicator / Jump Trigger */}
-      <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 bg-slate-800/90 px-4 py-2 rounded-full text-white text-sm font-bold shadow-lg z-[160] transition-opacity duration-300 backdrop-blur-sm cursor-pointer hover:bg-slate-700"
-        onClick={() => { setIsJumpOpen(true); setJumpTarget(currentPage.toString()); }}
-        style={{ opacity: showControls ? 1 : 0, pointerEvents: showControls ? 'auto' : 'none' }}>
-        {currentPage} / {numPages || '-'}
-      </div>
+        {/* Current Page Indicator / Jump Trigger */}
+        <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 bg-slate-800/90 px-4 py-2 rounded-full text-white text-sm font-bold shadow-lg z-[160] transition-opacity duration-300 backdrop-blur-sm cursor-pointer hover:bg-slate-700"
+          onClick={() => { setIsJumpOpen(true); setJumpTarget(currentPage.toString()); }}
+          style={{ opacity: showControls ? 1 : 0, pointerEvents: showControls ? 'auto' : 'none' }}>
+          {currentPage} / {numPages || '-'}
+        </div>
 
-      {/* Mobile Bottom Toolbar (Unified) - Increased Z-Index to prevent Canvas blockage */}
-      <div className={`md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 p-2 z-[150] pb-6 transition-transform duration-300 ${showControls ? 'translate-y-0' : 'translate-y-full'}`}>
-        <div className="flex justify-between items-center px-4">
-          {/* Tools */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setToolMode('CURSOR')}
-              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'CURSOR' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
-            >
-              <i className="fas fa-mouse-pointer text-xl mb-1"></i>
-              <span className="text-[10px]">Seç</span>
-            </button>
-            <button
-              onClick={() => setToolMode('PEN')}
-              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'PEN' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
-            >
-              <i className="fas fa-pen text-xl mb-1"></i>
-              <span className="text-[10px]">Kalem</span>
-            </button>
-            <button
-              onClick={() => setToolMode('HIGHLIGHTER')}
-              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'HIGHLIGHTER' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
-            >
-              <i className="fas fa-highlighter text-xl mb-1"></i>
-              <span className="text-[10px]">Fosforlu</span>
-            </button>
-            <button
-              onClick={() => setToolMode('ERASER')}
-              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'ERASER' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
-            >
-              <i className="fas fa-eraser text-xl mb-1"></i>
-              <span className="text-[10px]">Silgi</span>
-            </button>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-2">
-            <button onClick={toggleFullscreen} className="p-3 text-slate-300 active:text-white bg-slate-800 rounded-lg"><i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'}`}></i></button>
-            <button onClick={undoAnnotation} className="p-3 text-slate-300 active:text-white"><i className="fas fa-undo text-lg"></i></button>
-            <div className="w-px h-8 bg-slate-700 mx-1 self-center"></div>
-            {/* Active Color Preview */}
-            <div className="relative group">
+        {/* Mobile Bottom Toolbar (Unified) - Increased Z-Index to prevent Canvas blockage */}
+        <div className={`md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 p-2 z-[150] pb-6 transition-transform duration-300 ${showControls ? 'translate-y-0' : 'translate-y-full'}`}>
+          <div className="flex justify-between items-center px-4">
+            {/* Tools */}
+            <div className="flex gap-2">
               <button
-                className="w-10 h-10 rounded-full border-2 border-white shadow-sm flex items-center justify-center"
-                style={{ backgroundColor: penColor }}
-                onClick={() => {
-                  // Cycle colors
-                  const colors = ['#EF4444', '#3B82F6', '#000000', '#10B981'];
-                  const idx = colors.indexOf(penColor);
-                  setPenColor(colors[(idx + 1) % colors.length]);
-                }}
+                onClick={() => setToolMode('CURSOR')}
+                className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'CURSOR' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
               >
+                <i className="fas fa-mouse-pointer text-xl mb-1"></i>
+                <span className="text-[10px]">Seç</span>
+              </button>
+              <button
+                onClick={() => setToolMode('PEN')}
+                className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'PEN' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
+              >
+                <i className="fas fa-pen text-xl mb-1"></i>
+                <span className="text-[10px]">Kalem</span>
+              </button>
+              <button
+                onClick={() => setToolMode('HIGHLIGHTER')}
+                className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'HIGHLIGHTER' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
+              >
+                <i className="fas fa-highlighter text-xl mb-1"></i>
+                <span className="text-[10px]">Fosforlu</span>
+              </button>
+              <button
+                onClick={() => setToolMode('ERASER')}
+                className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'ERASER' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
+              >
+                <i className="fas fa-eraser text-xl mb-1"></i>
+                <span className="text-[10px]">Silgi</span>
               </button>
             </div>
+
+            {/* Actions */}
+            <div className="flex gap-2">
+              <button onClick={toggleFullscreen} className="p-3 text-slate-300 active:text-white bg-slate-800 rounded-lg"><i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'}`}></i></button>
+              <button onClick={undoAnnotation} className="p-3 text-slate-300 active:text-white"><i className="fas fa-undo text-lg"></i></button>
+              <div className="w-px h-8 bg-slate-700 mx-1 self-center"></div>
+              {/* Active Color Preview */}
+              <div className="relative group">
+                <button
+                  className="w-10 h-10 rounded-full border-2 border-white shadow-sm flex items-center justify-center"
+                  style={{ backgroundColor: penColor }}
+                  onClick={() => {
+                    // Cycle colors
+                    const colors = ['#EF4444', '#3B82F6', '#000000', '#10B981'];
+                    const idx = colors.indexOf(penColor);
+                    setPenColor(colors[(idx + 1) % colors.length]);
+                  }}
+                >
+                </button>
+              </div>
+            </div>
           </div>
+
+          {/* Expanded Colors (Visible if Pen/Highlighter Active) */}
+          {(toolMode === 'PEN' || toolMode === 'HIGHLIGHTER') && (
+            <div className="flex justify-center gap-4 mt-3 pb-2 border-t border-slate-800 pt-2">
+              {['#EF4444', '#3B82F6', '#000000', '#10B981', '#F59E0B'].map(c => (
+                <button
+                  key={c}
+                  onClick={() => setPenColor(c)}
+                  className={`w-8 h-8 rounded-full shadow-lg transform transition ${penColor === c ? 'scale-125 border-2 border-white' : 'scale-100 border border-transparent'}`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Expanded Colors (Visible if Pen/Highlighter Active) */}
-        {(toolMode === 'PEN' || toolMode === 'HIGHLIGHTER') && (
-          <div className="flex justify-center gap-4 mt-3 pb-2 border-t border-slate-800 pt-2">
-            {['#EF4444', '#3B82F6', '#000000', '#10B981', '#F59E0B'].map(c => (
-              <button
-                key={c}
-                onClick={() => setPenColor(c)}
-                className={`w-8 h-8 rounded-full shadow-lg transform transition ${penColor === c ? 'scale-125 border-2 border-white' : 'scale-100 border border-transparent'}`}
-                style={{ backgroundColor: c }}
-              />
-            ))}
+        {/* Success Modal */}
+        {showSuccessModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
+            <div className="bg-white p-8 rounded-xl text-center">
+              <i className="fas fa-check-circle text-5xl text-green-500 mb-4"></i>
+              <h3 className="text-xl font-bold mb-4">Yazdırıldı</h3>
+              <button onClick={onExit} className="bg-slate-900 text-white px-6 py-2 rounded">Tamam</button>
+            </div>
           </div>
         )}
-      </div>
-
-      {/* Success Modal */}
-      {showSuccessModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
-          <div className="bg-white p-8 rounded-xl text-center">
-            <i className="fas fa-check-circle text-5xl text-green-500 mb-4"></i>
-            <h3 className="text-xl font-bold mb-4">Yazdırıldı</h3>
-            <button onClick={onExit} className="bg-slate-900 text-white px-6 py-2 rounded">Tamam</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+        );
 };
 
-export default UserViewer;
+        export default UserViewer;
