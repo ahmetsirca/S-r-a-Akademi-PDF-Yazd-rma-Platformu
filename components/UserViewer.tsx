@@ -394,20 +394,78 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     }
   };
 
-  // Scroll Handler for Auto-Hiding UI
+  // Scroll-based Page Detection (Replaces IntersectionObserver for robustness)
+  const updateCurrentPage = () => {
+    if (!containerRef.current || !numPages) return;
+
+    // Calculate the "center" of the view
+    const container = containerRef.current;
+    const viewTop = container.scrollTop;
+    const viewHeight = container.clientHeight;
+    const viewCenter = viewTop + (viewHeight / 2);
+
+    // Simple heuristic: Iterate pages to find which one contains the center point
+    // Optimization: Since pages are ordered, we can stop once we pass the range
+    // Or simpler: Check all, it's cheap for < 500 element references
+
+    let bestPage = currentPage;
+    let minDist = Infinity;
+
+    // Optimization: Search neighborhood of current page first? 
+    // No, just full scan is fine for typical PDF sizes (DOM access is fast enough)
+    // Actually, getting offsetTop triggers reflow if layout changed.
+    // To avoid layout thrashing, rely on the fact that container is scrolling.
+
+    // Better strategy: just loop all.
+    for (let i = 1; i <= numPages; i++) {
+      const el = document.getElementById(`page-${i}`);
+      if (el) {
+        const top = el.offsetTop;
+        const bottom = top + el.clientHeight;
+
+        // Check if center line is within this page
+        if (viewCenter >= top && viewCenter <= bottom) {
+          bestPage = i;
+          break;
+        }
+
+        // Fallback: simple closest distance to center
+        const dist = Math.abs((top + el.clientHeight / 2) - viewCenter);
+        if (dist < minDist) {
+          minDist = dist;
+          bestPage = i;
+        }
+      }
+    }
+
+    if (bestPage !== currentPage) {
+      setCurrentPage(bestPage);
+    }
+  };
+
+  // Ref to store the requestAnimationFrame ID
+  const rAFRef = useRef<number | null>(null);
+
+  // Scroll Handler for Auto-Hiding UI AND Page Tracking
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const currentScrollY = e.currentTarget.scrollTop;
 
-    // Threshold to prevent jitter
+    // 1. UI Auto-Hide
     if (Math.abs(currentScrollY - lastScrollY.current) > 10) {
       if (currentScrollY > lastScrollY.current && currentScrollY > 50) {
-        // Scrolling Down - Hide
         setShowControls(false);
       } else {
-        // Scrolling Up - Show
         setShowControls(true);
       }
       lastScrollY.current = currentScrollY;
+    }
+
+    // 2. Update Page Tracking (Throttled via RequestAnimationFrame)
+    if (rAFRef.current === null) { // Only schedule if not already scheduled
+      rAFRef.current = requestAnimationFrame(() => {
+        updateCurrentPage();
+        rAFRef.current = null; // Reset the ref after execution
+      });
     }
   };
 
@@ -514,30 +572,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     }
   };
 
-  // Intersection Observer
-  useEffect(() => {
-    if (!numPages || !containerRef.current) return;
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          const id = entry.target.id;
-          const num = parseInt(id.replace('page-', ''));
-          if (!isNaN(num)) setCurrentPage(num);
-        }
-      });
-    }, {
-      root: containerRef.current, // Explicitly set scroll container as root
-      threshold: 0.1,
-      rootMargin: "100% 0px 100% 0px" // Pre-load pages well before they appear
-    });
-
-    for (let i = 1; i <= numPages; i++) {
-      const el = document.getElementById(`page-${i}`);
-      if (el) observer.observe(el);
-    }
-    return () => observer.disconnect();
-  }, [numPages, pdfUrl, containerRef.current]);
+  // REMOVED IntersectionObserver - Replaced by Scroll Tracking in handleScroll
 
   const handleZoom = (delta: number) => {
     setScale(prev => Math.min(Math.max(0.5, prev + delta), 3.0));
@@ -847,8 +882,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
             >
               {numPages && Array.from(new Array(numPages)).map((_, index) => {
                 const pageNum = index + 1;
-                // Virtualization: Increased window to prevent blank pages during fast scroll
-                const isVisible = Math.abs(pageNum - currentPage) <= 5;
+                // Virtualization: Window size 10 to ensure pages are always ready
+                const isVisible = Math.abs(pageNum - currentPage) <= 10;
                 const height = pageHeights[pageNum] || estimatedHeight;
 
                 return (
