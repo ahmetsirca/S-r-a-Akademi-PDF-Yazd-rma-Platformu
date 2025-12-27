@@ -1,23 +1,24 @@
-```typescript
 import React, { useState, useEffect } from 'react';
 import { StorageService } from '../services/storage';
 import { PDFBook, AccessKey, Collection } from '../types';
 
-import * as pdfjsLib from 'pdfjs-dist';
-import mammoth from 'mammoth';
 import { QuestionParser, ParsedQuestion } from '../utils/QuestionParser';
 import { QuizService } from '../services/db';
 
-// Worker setup for PDF.js (Client-side)
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Worker setup will be done dynamically
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  // Tabs: 'KEYS' = Legacy Key Management, 'COURSES' = New Folder/Course Management, 'USERS' = User Management, 'LOGS' = Activity Logs
-  const [adminTab, setAdminTab] = useState<'KEYS' | 'COURSES' | 'USERS' | 'LOGS'>('KEYS');
+  // Tabs: 'KEYS' = Legacy Key Management, 'COURSES' = New Folder/Course Management, 'USERS' = User Management, 'LOGS' = Activity Logs, 'QUIZ' = Quiz Upload
+  const [adminTab, setAdminTab] = useState<'KEYS' | 'COURSES' | 'USERS' | 'LOGS' | 'QUIZ'>('KEYS');
+
+  // -- QUIZ STATE --
+  const [quizFile, setQuizFile] = useState<File | null>(null);
+  const [parsedQuestions, setParsedQuestions] = useState<ParsedQuestion[]>([]);
+  const [isParsing, setIsParsing] = useState(false);
 
   // -- EXISTING STATE (Keys) --
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -150,13 +151,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
       if (result.error) {
         console.error("Supabase Update Error:", result.error);
-        alert(`Güncelleme başarısız: ${result.error.message || 'Veritabanı hatası'}`);
+        alert(`Güncelleme başarısız: ${result.error.message || 'Veritabanı hatası'} `);
         return;
       }
 
       setPermModalOpen(false);
       alert("İzinler güncellendi.");
-    } catch (e: any) { console.error(e); alert(`Hata oluştu: ${e.message}`); }
+    } catch (e: any) { console.error(e); alert(`Hata oluştu: ${e.message} `); }
   };
 
   const handleOpenDeviceModal = async (user: import('../types').UserProfile) => {
@@ -367,6 +368,64 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     setFolderKeys(await StorageService.getFolderKeys());
   };
 
+  // -- QUIZ HANDLERS --
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setQuizFile(file);
+    setIsParsing(true);
+    setParsedQuestions([]);
+
+    try {
+      let text = '';
+      if (file.name.endsWith('.pdf')) {
+        const pdfjsLib = await import('pdfjs-dist');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullText = '';
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map((item: any) => item.str).join(' ');
+          fullText += pageText + '\n';
+        }
+        text = fullText;
+
+      } else if (file.name.endsWith('.docx')) {
+        const mammoth = await import('mammoth');
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        text = result.value;
+      }
+
+      const questions = QuestionParser.parse(text);
+      setParsedQuestions(questions);
+
+    } catch (error: any) {
+      console.error("Parsing error:", error);
+      alert("Dosya okunurken hata oluştu: " + error.message);
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  const handleSaveQuiz = async () => {
+    if (parsedQuestions.length === 0) return;
+    try {
+      await QuizService.createQuestionsBulk(parsedQuestions);
+      alert(`${parsedQuestions.length} soru başarıyla kaydedildi!`);
+      setParsedQuestions([]);
+      setQuizFile(null);
+    } catch (error: any) {
+      console.error("Save error:", error);
+      alert("Kaydetme hatası: " + error.message);
+    }
+  };
+
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8 min-h-screen bg-slate-50">
@@ -383,17 +442,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       {/* Sub-Navigation */}
       < div className="flex justify-center mb-8" >
         <div className="bg-white p-1 rounded-xl shadow-sm border border-slate-200 inline-flex">
-          <button onClick={() => setAdminTab('KEYS')} className={`px-6 py-2 rounded-lg text-sm font-bold transition ${adminTab === 'KEYS' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+          <button onClick={() => setAdminTab('KEYS')} className={`px - 6 py - 2 rounded - lg text - sm font - bold transition ${adminTab === 'KEYS' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'} `}>
             <i className="fas fa-key mr-2"></i>Eski Anahtarlar
           </button>
-          <button onClick={() => setAdminTab('COURSES')} className={`px-6 py-2 rounded-lg text-sm font-bold transition ${adminTab === 'COURSES' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+          <button onClick={() => setAdminTab('COURSES')} className={`px - 6 py - 2 rounded - lg text - sm font - bold transition ${adminTab === 'COURSES' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'} `}>
             <i className="fas fa-folder-tree mr-2"></i>Dersler
           </button>
-          <button onClick={() => setAdminTab('USERS')} className={`px-6 py-2 rounded-lg text-sm font-bold transition ${adminTab === 'USERS' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+          <button onClick={() => setAdminTab('USERS')} className={`px - 6 py - 2 rounded - lg text - sm font - bold transition ${adminTab === 'USERS' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'} `}>
             <i className="fas fa-users mr-2"></i>Kullanıcılar
           </button>
-          <button onClick={() => setAdminTab('LOGS')} className={`px-6 py-2 rounded-lg text-sm font-bold transition ${adminTab === 'LOGS' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+          <button onClick={() => setAdminTab('LOGS')} className={`px - 6 py - 2 rounded - lg text - sm font - bold transition ${adminTab === 'LOGS' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'} `}>
             <i className="fas fa-history mr-2"></i>Loglar
+          </button>
+          <button onClick={() => setAdminTab('QUIZ')} className={`px-6 py-2 rounded-lg text-sm font-bold transition ${adminTab === 'QUIZ' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <i className="fas fa-question-circle mr-2"></i>Sınav Yükle (YENİ)
           </button>
         </div>
       </div >
@@ -417,7 +479,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                       <div className="font-bold text-slate-800">{u.fullName || 'Adsız'}</div>
                       <div className="text-xs text-slate-500">{u.email}</div>
                     </div>
-                  </td>
+                  </td >
                   <td className="p-4">
                     {u.isOnline
                       ? <span className="inline-flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold"><span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>Aktif</span>
@@ -443,11 +505,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                       <i className="fas fa-key mr-2"></i>Şifre
                     </button>
                   </td>
-                </tr>
+                </tr >
               ))}
-            </tbody>
-          </table>
-        </div>
+            </tbody >
+          </table >
+        </div >
       )}
 
       {
@@ -649,7 +711,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       }
 
       {
-        adminTab === 'KEYS' ? (
+        adminTab === 'KEYS' && (
           // --- LEGACY KEYS VIEW ---
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
@@ -717,7 +779,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               </div>
             </div>
           </div>
-        ) : (
+        )
+      }
+
+      {
+        adminTab === 'COURSES' && (
           // --- NEW COURSES VIEW ---
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             {/* Sidebar: Folders Tree */}
@@ -935,6 +1001,79 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           </div>
         )
       }
+
+      {adminTab === 'QUIZ' && (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <i className="fas fa-file-upload text-3xl"></i>
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800">Sınav Yükleme Sihirbazı</h2>
+            <p className="text-slate-500 mt-2">Word veya PDF dosyanızı yükleyin, soruları otomatik ayrıştıralım.</p>
+          </div>
+
+          <div className="max-w-xl mx-auto mb-8">
+            <label className="block w-full cursor-pointer bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center hover:bg-indigo-50 hover:border-indigo-300 transition group">
+              <input type="file" accept=".pdf,.docx" className="hidden" onChange={handleFileUpload} />
+              <i className="fas fa-cloud-upload-alt text-4xl text-slate-400 group-hover:text-indigo-500 mb-4 transition"></i>
+              <p className="font-bold text-slate-700 group-hover:text-indigo-700">Dosya Seç veya Sürükle</p>
+              <p className="text-xs text-slate-400 mt-1">PDF veya Word (.docx)</p>
+            </label>
+          </div>
+
+          {isParsing && (
+            <div className="text-center py-12">
+              <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-slate-600 font-bold animate-pulse">Yapay Zeka Soruları Okuyor...</p>
+            </div>
+          )}
+
+          {!isParsing && parsedQuestions.length > 0 && (
+            <div className="animate-fade-in">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-slate-800"><span className="text-green-600">{parsedQuestions.length}</span> Soru Bulundu</h3>
+                <button
+                  onClick={handleSaveQuiz}
+                  className="bg-green-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-green-700 shadow-lg shadow-green-200 transition"
+                >
+                  <i className="fas fa-save mr-2"></i>Hepsini Kaydet
+                </button>
+              </div>
+
+              <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                {parsedQuestions.map((q, idx) => (
+                  <div key={idx} className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <div className="flex gap-3">
+                      <span className="bg-indigo-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0">{idx + 1}</span>
+                      <div className="flex-1">
+                        <p className="font-bold text-slate-800 mb-3">{q.question_text}</p>
+                        <div className="space-y-1 mb-3">
+                          {q.options.map((opt, i) => (
+                            <div key={i} className={`p-2 rounded text-sm ${opt.startsWith(q.correct_answer) ? 'bg-green-100 text-green-800 border border-green-200 font-bold' : 'bg-white border border-slate-100 text-slate-600'}`}>
+                              {opt}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="bg-yellow-50 p-2 rounded text-xs text-yellow-800 border border-yellow-100">
+                          <strong className="mr-1">Çözüm:</strong> {q.explanation}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!isParsing && quizFile && parsedQuestions.length === 0 && (
+            <div className="text-center py-8 bg-red-50 rounded-xl border border-red-100 text-red-600">
+              <i className="fas fa-exclamation-circle text-2xl mb-2"></i>
+              <p className="font-bold">Soru Bulunamadı</p>
+              <p className="text-sm mt-1">Lütfen dosya formatının "1. Soru... A) ... B) ..." şeklinde olduğundan emin olun.</p>
+            </div>
+          )}
+        </div>
+      )}
     </div >
   );
 };
