@@ -39,7 +39,10 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
     };
 
     const handleSave = async () => {
-        if (!title || !content) return;
+        if (!title.trim() || !content.trim()) {
+            alert("Lütfen hem 'Hikaye Başlığı' hem de 'Hikaye İçeriği' alanlarını doldurunuz.");
+            return;
+        }
         let success = false;
 
         console.log(`[StoryMode] Attempting save. NotebookID: ${notebookId}, Title: ${title}`);
@@ -238,8 +241,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                         <button
                             id="save-btn"
                             onClick={handleSave}
-                            disabled={!title || !content}
-                            className="bg-green-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 transition"
+                            className={`bg-green-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-green-700 transition ${(!title || !content) ? 'opacity-70' : 'opacity-100'}`}
                         >
                             {editingId ? 'Güncelle' : 'Kaydet'}
                         </button>
