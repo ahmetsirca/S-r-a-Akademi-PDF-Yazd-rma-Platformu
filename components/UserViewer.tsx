@@ -1163,18 +1163,20 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
             ))}
           </div>
         )}
-        {/* Success Modal */}
-        {showSuccessModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
-            <div className="bg-white p-8 rounded-xl text-center">
-              <i className="fas fa-check-circle text-5xl text-green-500 mb-4"></i>
-              <h3 className="text-xl font-bold mb-4">Yazdırıldı</h3>
-              <button onClick={onExit} className="bg-slate-900 text-white px-6 py-2 rounded">Tamam</button>
-            </div>
-          </div>
-        )}
       </div>
-      );
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
+          <div className="bg-white p-8 rounded-xl text-center">
+            <i className="fas fa-check-circle text-5xl text-green-500 mb-4"></i>
+            <h3 className="text-xl font-bold mb-4">Yazdırıldı</h3>
+            <button onClick={onExit} className="bg-slate-900 text-white px-6 py-2 rounded">Tamam</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
-      export default UserViewer;
+export default UserViewer;
