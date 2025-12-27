@@ -3,7 +3,7 @@ import { ViewState, PDFBook, AccessKey, UserProfile, UserPermission } from './ty
 import { StorageService } from './services/storage';
 import { DBService } from './services/db';
 import { AuthService } from './services/auth';
-import AdminDashboard from './components/AdminDashboard';
+const AdminDashboard = React.lazy(() => import('./components/AdminDashboard'));
 import UserViewer from './components/UserViewer';
 import VocabularyNotebook from './components/VocabularyNotebook';
 import { Session } from '@supabase/supabase-js';
@@ -805,7 +805,9 @@ const App: React.FC = () => {
         )}
 
         {view === 'ADMIN_DASHBOARD' && (
-          <AdminDashboard onLogout={() => setView('ADMIN_LOGIN')} />
+          <React.Suspense fallback={<div className="flex h-screen items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div></div>}>
+            <AdminDashboard onLogout={() => setView('USER_LOGIN')} />
+          </React.Suspense>
         )}
 
         {view === 'USER_VIEWER' && activeBook && (
