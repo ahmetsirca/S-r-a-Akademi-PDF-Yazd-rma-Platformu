@@ -381,8 +381,36 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         const oldScrollLeft = touchFocalPoint.current.scrollX;
 
         // New scroll positions
-        const newScrollTop = (oldScrollTop + fy) * ratio - fy;
+        let newScrollTop = (oldScrollTop + fy) * ratio - fy;
         const newScrollLeft = (oldScrollLeft + fx) * ratio - fx;
+
+        // --- STRICT BOUNDARY CLAMPING ---
+        // Ensure we don't accidentally scroll to another page
+        const pageEl = document.getElementById(`page-${currentPage}`);
+        if (pageEl) {
+          const pageTop = pageEl.offsetTop;
+          const pageBottom = pageTop + pageEl.clientHeight;
+          const viewHeight = containerRef.current.clientHeight;
+
+          // Max valid scroll top: Page Bottom - View Height (if page is taller)
+          const maxScroll = Math.max(pageTop, pageBottom - viewHeight);
+          const minScroll = pageTop;
+
+          // Allow scrolling within the page, but HARD CLAMP to page edges
+
+          // If the new scroll top puts the Top of the view ABOVE the page top:
+          if (newScrollTop < pageTop) newScrollTop = pageTop;
+
+          // If the new scroll top puts the Bottom of the view BELOW the page bottom:
+          if (newScrollTop > maxScroll) {
+            // But if page fits in view?
+            if (pageEl.clientHeight < viewHeight) {
+              newScrollTop = pageTop; // Center/Top align
+            } else {
+              newScrollTop = maxScroll;
+            }
+          }
+        }
 
         // Apply Scroll immediately
         containerRef.current.scrollTop = newScrollTop;
@@ -976,7 +1004,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       {/* Scrollable Content with Touch Events */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto bg-slate-500 relative flex flex-col items-center pt-20 pb-20 md:pt-8 md:pb-8 transition-all duration-300"
+        className="flex-1 overflow-auto bg-slate-500 relative flex flex-col items-center pt-20 pb-20 md:pt-8 md:pb-8 transition-all duration-300 overscroll-none touch-pan-x touch-pan-y"
         onWheel={handleWheel}
         onScroll={handleScroll}
         onClick={handleContentClick}
