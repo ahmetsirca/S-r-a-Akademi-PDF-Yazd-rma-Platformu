@@ -19,19 +19,36 @@ const App: React.FC = () => {
   // Lazy init to check URL immediately - GOOGLE GRADE FIX
   // We check the URL strictly during INITIAL STATE SETUP to return true immediately.
   // This executes BEFORE the first render, preventing any flash of Login screen.
+  // HYBRID STRATEGY: Check both Search (?) and Hash (#) for robustness
   const [isPublicMode, setIsPublicMode] = useState(() => {
     const fullUrl = window.location.href;
     console.log("App Mounting - Checking URL for Public Share:", fullUrl);
-    return fullUrl.includes('share=flashcard') && fullUrl.includes('notebookId=');
+
+    // Check Query Params
+    if (fullUrl.includes('share=flashcard') && fullUrl.includes('notebookId=')) return true;
+
+    // Check Hash Query (e.g. /#share=flashcard&notebookId=...)
+    // Some routers or servers move params to hash, or we might use hash links explicitly.
+    const hash = window.location.hash;
+    if (hash.includes('share=flashcard') && hash.includes('notebookId=')) return true;
+
+    return false;
   });
 
   const [publicNoteId, setPublicNoteId] = useState<string | null>(() => {
     const fullUrl = window.location.href;
-    if (fullUrl.includes('share=flashcard')) {
-      const match = fullUrl.match(/[?&]notebookId=([^&]+)/);
+    const hash = window.location.hash;
+
+    // Helper to extract id
+    const extractId = (str: string) => {
+      const match = str.match(/[?&#]notebookId=([^&]+)/);
       return match ? match[1] : null;
-    }
-    return null;
+    };
+
+    let id = extractId(fullUrl);
+    if (!id) id = extractId(hash);
+
+    return id;
   });
 
   // No useEffect needed for detection anymore. It's already set.
@@ -897,6 +914,10 @@ const App: React.FC = () => {
             <p className="text-slate-800 font-bold mb-1">SIRÇA AKADEMİ (KOMİSERİM PAEMİSYON)</p>
             <p className="text-blue-600 font-medium mb-4">Uygulama Şuheda SIRÇA tarafından yapılmıştır.</p>
             <p className="text-slate-400 text-xs">© 2025 • Güvenli Belge Dağıtım Sistemi</p>
+            {/* Version & Debug Info - Hidden/Small */}
+            <div className="mt-4 pt-4 border-t border-slate-100 max-w-xs mx-auto text-[10px] text-slate-300 break-all">
+              App v2.1 • {window.location.href}
+            </div>
           </footer>
         )
       }

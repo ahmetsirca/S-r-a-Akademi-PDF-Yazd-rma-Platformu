@@ -445,19 +445,22 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
                                             <div className="border-t border-slate-100 my-1 pt-1">
                                                 <button
                                                     onClick={() => {
-                                                        const url = `${window.location.origin}${window.location.pathname}?share=flashcard&notebookId=${currentNotebook.id}`;
+                                                        // GOOGLE-GRADE FIX: Use HASH based routing to avoid server-side stripping
+                                                        // Example: https://app.com/#share=flashcard&notebookId=123
+                                                        const url = `${window.location.origin}/#share=flashcard&notebookId=${currentNotebook.id}`;
                                                         navigator.clipboard.writeText(url);
-                                                        alert("Herkese Açık Flashcard Linki Kopyalandı!\n\nBu linki paylaştığınız kişiler uygulamaya üye olmadan kartları görüntüleyebilir.");
+                                                        alert("Herkese Açık Flashcard Linki Kopyalandı!\n\n(V2.1 - Hash URL)\nBu linki paylaştığınız kişiler uygulamaya üye olmadan kartları görüntüleyebilir.");
                                                         setShowExportMenu(false);
                                                     }}
+
                                                     className="block w-full text-left px-4 py-2 hover:bg-yellow-50 rounded-lg text-slate-700 font-medium"
                                                 >
                                                     <i className="fas fa-link text-yellow-500 mr-2"></i> Herkese Açık Link (Flashcard)
                                                 </button>
-                                                <a href={`https://wa.me/?text=Kartlarımı incele: ${window.location.origin}${window.location.pathname}?share=flashcard&notebookId=${currentNotebook.id}`} target="_blank" rel="noopener noreferrer" className="block w-full text-left px-4 py-2 hover:bg-green-50 rounded-lg text-slate-700 font-medium">
+                                                <a href={`https://wa.me/?text=Kartlarımı incele: ${window.location.origin}/%23share=flashcard&notebookId=${currentNotebook.id}`} target="_blank" rel="noopener noreferrer" className="block w-full text-left px-4 py-2 hover:bg-green-50 rounded-lg text-slate-700 font-medium">
                                                     <i className="fab fa-whatsapp text-green-500 mr-2"></i> WhatsApp
                                                 </a>
-                                                <a href={`https://twitter.com/intent/tweet?text=Kelime kartlarımı incele&url=${window.location.origin}${window.location.pathname}?share=flashcard&notebookId=${currentNotebook.id}`} target="_blank" rel="noopener noreferrer" className="block w-full text-left px-4 py-2 hover:bg-blue-50 rounded-lg text-slate-700 font-medium">
+                                                <a href={`https://twitter.com/intent/tweet?text=Kelime kartlarımı incele&url=${window.location.origin}/%23share=flashcard&notebookId=${currentNotebook.id}`} target="_blank" rel="noopener noreferrer" className="block w-full text-left px-4 py-2 hover:bg-blue-50 rounded-lg text-slate-700 font-medium">
                                                     <i className="fab fa-twitter text-blue-400 mr-2"></i> X (Twitter)
                                                 </a>
                                             </div>
