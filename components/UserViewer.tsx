@@ -6,11 +6,8 @@ import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 // import '../index.css'; // Removed: Tailwind is loaded via CDN
 
-// Set worker source - Standard Vite/Webpack import for best compatibility
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url,
-).toString();
+// Set worker source - EXPLICIT LOCAL FILE to match exact version 4.4.168
+pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 import { DBService } from '../services/db';
 import { AuthService } from '../services/auth';
