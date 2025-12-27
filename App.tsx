@@ -11,8 +11,18 @@ import { Session } from '@supabase/supabase-js';
 
 const App: React.FC = () => {
   // Navigation State
-  const [view, setView] = useState<ViewState | 'PUBLIC_FLASHCARD'>('USER_LOGIN');
-  const [publicNotebookId, setPublicNotebookId] = useState<string | null>(null);
+  // Lazy init to check URL immediately
+  const [view, setView] = useState<ViewState | 'PUBLIC_FLASHCARD'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('share') === 'flashcard') return 'PUBLIC_FLASHCARD';
+    return 'USER_LOGIN';
+  });
+
+  const [publicNotebookId, setPublicNotebookId] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('notebookId');
+  });
+
   const [isLoading, setIsLoading] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
 
@@ -70,15 +80,10 @@ const App: React.FC = () => {
     console.log('App Build Timestamp: 2025-12-27 22:00 - Public Share Added');
 
     // Check for public share link first
-    const params = new URLSearchParams(window.location.search);
-    const shareType = params.get('share');
-    const noteId = params.get('notebookId');
-
-    if (shareType === 'flashcard' && noteId) {
-      console.log("Public Share Detected:", noteId);
-      setPublicNotebookId(noteId);
-      setView('PUBLIC_FLASHCARD');
-      return; // Skip normal auth flow for public view
+    // If we initialized into PUBLIC_FLASHCARD, skip auth init
+    if (view === 'PUBLIC_FLASHCARD') {
+      console.log("Public Share Active, skipping auth check.");
+      return;
     }
 
     // Check saved session first to ensure token is ready for fetch
