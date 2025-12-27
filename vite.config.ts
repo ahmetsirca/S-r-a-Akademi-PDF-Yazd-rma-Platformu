@@ -1,6 +1,7 @@
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import legacy from '@vitejs/plugin-legacy';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
@@ -9,7 +10,15 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       host: '0.0.0.0',
     },
-    plugins: [react()],
+    plugins: [
+      react(),
+      legacy({
+        targets: ['defaults', 'not IE 11', 'Android >= 5'],
+        // Explicitly polyfill common missing features for older WebViews
+        polyfills: ['es.promise.finally', 'es/map', 'es/set'],
+        modernPolyfills: ['es.promise.finally']
+      })
+    ],
     define: {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
@@ -20,8 +29,8 @@ export default defineConfig(({ mode }) => {
       }
     },
     build: {
-      chunkSizeWarningLimit: 1000,
-      target: 'es2015', // Support older mobile browsers
+      chunkSizeWarningLimit: 2000, // Increase limit
+      target: 'es2015',
       rollupOptions: {
         output: {
           manualChunks: {
