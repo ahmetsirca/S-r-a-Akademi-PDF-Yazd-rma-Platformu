@@ -24,6 +24,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
     // Feature State
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [showShareMenu, setShowShareMenu] = useState(false);
+    const [isViewerEditing, setIsViewerEditing] = useState(false); // New state for inline editing
 
     useEffect(() => {
         loadData();
@@ -81,22 +82,31 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             if (success) {
                 // Visual feedback
                 const btn = document.getElementById('save-btn');
-                if (btn) {
-                    const originalText = btn.innerText;
-                    btn.innerText = 'Kaydedildi! ✓';
-                    btn.style.backgroundColor = '#16a34a'; // green-600
-                    setTimeout(() => {
-                        btn.innerText = originalText;
-                        btn.style.backgroundColor = '';
-                    }, 2000);
-                }
+                const fullscreenBtn = document.getElementById('fullscreen-save-btn');
+
+                const showSuccess = (element: HTMLElement | null) => {
+                    if (element) {
+                        const originalText = element.innerText;
+                        element.innerText = 'Kaydedildi! ✓';
+                        const originalBg = element.style.backgroundColor;
+                        element.style.backgroundColor = '#16a34a';
+                        setTimeout(() => {
+                            element.innerText = originalText;
+                            element.style.backgroundColor = originalBg;
+                        }, 2000);
+                    }
+                };
+
+                showSuccess(btn);
+                showSuccess(fullscreenBtn);
+
                 if (!editingId) {
                     // Only clear if not editing, OR if we want to reset after update?
                     // User might want to keep editing after save.
                     // Let's keep it for now but maybe change UX later.
                     // Actually usually after save we want to keep editing the same doc.
                 }
-                // setEditingId(null); // Keep in edit mode after save
+                setIsViewerEditing(false); // Exit edit mode after save
                 loadData();
             }
         } catch (e: any) {
@@ -119,7 +129,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
         setEditingId(story.id);
         setTitle(story.title);
         setContent(story.content);
-        // Scroll to editor on mobile
+        // Scroll to editor on mobile (or open viewer if fullscreen logic was different, but here standard)
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -209,8 +219,10 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
     };
 
 
-    // Handle Text Selection
+    // Handle Text Selection (Disabled in Edit Mode)
     const handleMouseUp = (e: React.MouseEvent) => {
+        if (isViewerEditing) return; // Retrieve normal text behavior when editing
+
         e.stopPropagation(); // Prevent document click handler
         const selection = window.getSelection();
         if (!selection || selection.toString().trim().length === 0) {
@@ -273,7 +285,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
     return (
         <div className={`grid md:grid-cols-2 gap-6 relative transition-all duration-300 ${isFullscreen ? 'fixed inset-0 z-50 bg-white p-6' : 'h-auto md:h-[600px]'}`}>
             {/* Popover */}
-            {popover && (
+            {popover && !isViewerEditing && (
                 <div
                     className="fixed z-[9999] bg-slate-800 text-white p-2 rounded-lg shadow-xl flex flex-col items-center gap-2 transform -translate-x-1/2 -translate-y-full animate-fade-in"
                     // Use pageX/Y if absolute to document, but for fixed we need clientX.
@@ -370,7 +382,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                 </div>
             </div>
 
-            {/* Right: Interactive Viewer */}
+            {/* Right: Interactive Viewer / Editor */}
             <div
                 ref={viewerRef}
                 onMouseUp={handleMouseUp}
@@ -378,6 +390,28 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             >
                 {/* Toolbar */}
                 <div className={`flex justify-end gap-2 mb-4 border-b border-slate-200 pb-2 ${isFullscreen ? 'p-4 bg-white shadow-sm' : ''}`}>
+
+                    {/* EDIT CONTROLS IN VIEWER */}
+                    {isViewerEditing ? (
+                        <>
+                            <button
+                                id="fullscreen-save-btn"
+                                onClick={handleSave}
+                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-1 rounded text-sm font-bold flex items-center gap-2 animate-pulse"
+                            >
+                                <i className="fas fa-save"></i> Kaydet
+                            </button>
+                            <button onClick={() => setIsViewerEditing(false)} className="text-slate-500 hover:text-slate-700 px-3 py-1 rounded hover:bg-slate-200 transition">
+                                İptal
+                            </button>
+                            <div className="w-px bg-slate-300 mx-1 h-6 self-center"></div>
+                        </>
+                    ) : (
+                        <button onClick={() => setIsViewerEditing(true)} className="text-slate-400 hover:text-blue-600 p-2 rounded hover:bg-blue-50 transition" title="Düzenle">
+                            <i className="fas fa-pen"></i>
+                        </button>
+                    )}
+
                     <div className="relative">
                         <button
                             onClick={(e) => { e.stopPropagation(); setShowShareMenu(!showShareMenu); }}
@@ -420,15 +454,42 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                 <div className="flex-1 overflow-auto flex justify-center pb-10">
                     {title || content ? (
                         <article className={`bg-white shadow-sm border border-slate-100 p-8 md:p-12 max-w-[800px] w-full mx-auto transition-all ${isFullscreen ? 'shadow-2xl my-4 min-h-[calc(100vh-100px)]' : 'min-h-full'}`}>
-                            <h2 className="text-3xl font-bold text-slate-800 mb-8 text-center font-serif tracking-wide border-b border-slate-100 pb-4">{title || 'Başlıksız Hikaye'}</h2>
-                            <div className="text-xl leading-loose text-slate-800 font-serif break-words">
-                                {renderInteractiveContent(content)}
-                            </div>
+
+                            {isViewerEditing ? (
+                                // EDIT MODE IN VIEWER
+                                <div className="flex flex-col h-full gap-4">
+                                    <input
+                                        type="text"
+                                        placeholder="Hikaye Başlığı"
+                                        className="w-full text-3xl font-bold text-slate-800 text-center font-serif tracking-wide border-b border-dashed border-slate-300 pb-2 focus:border-blue-500 outline-none bg-transparent"
+                                        value={title}
+                                        onChange={e => setTitle(e.target.value)}
+                                    />
+                                    <textarea
+                                        className="w-full flex-1 p-2 resize-none outline-none text-xl leading-loose text-slate-800 font-serif bg-transparent"
+                                        placeholder="Hikayeni buraya yaz..."
+                                        value={content}
+                                        onChange={e => setContent(e.target.value)}
+                                    />
+                                </div>
+                            ) : (
+                                // READ MODE
+                                <>
+                                    <h2 className="text-3xl font-bold text-slate-800 mb-8 text-center font-serif tracking-wide border-b border-slate-100 pb-4">{title || 'Başlıksız Hikaye'}</h2>
+                                    <div className="text-xl leading-loose text-slate-800 font-serif break-words">
+                                        {renderInteractiveContent(content)}
+                                    </div>
+                                </>
+                            )}
+
                         </article>
                     ) : (
                         <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                            <i className="fas fa-book-reader text-4xl mb-4"></i>
-                            <p className="text-center px-4">Hikayeni yazmaya başla veya soldan bir hikaye seç. <br /><span className="text-xs mt-2 block opacity-70">Çevirmek veya dinlemek için metni seçin.</span></p>
+                            {/* ... Empty state ... */}
+                            <button onClick={() => setIsViewerEditing(true)} className="flex flex-col items-center gap-2 hover:text-blue-600 transition">
+                                <i className="fas fa-plus-circle text-4xl mb-2"></i>
+                                <span>Yeni Hikaye Yaz</span>
+                            </button>
                         </div>
                     )}
                 </div>
