@@ -10,7 +10,8 @@ import { Session } from '@supabase/supabase-js';
 
 const App: React.FC = () => {
   // Navigation State
-  const [view, setView] = useState<ViewState>('USER_LOGIN');
+  const [view, setView] = useState<ViewState | 'PUBLIC_FLASHCARD'>('USER_LOGIN');
+  const [publicNotebookId, setPublicNotebookId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
 
@@ -65,7 +66,19 @@ const App: React.FC = () => {
 
   // Initial Fetch & Auth Check
   useEffect(() => {
-    console.log('App Build Timestamp: 2025-12-24 20:30 - Fixes Applied');
+    console.log('App Build Timestamp: 2025-12-27 22:00 - Public Share Added');
+
+    // Check for public share link first
+    const params = new URLSearchParams(window.location.search);
+    const shareType = params.get('share');
+    const noteId = params.get('notebookId');
+
+    if (shareType === 'flashcard' && noteId) {
+      console.log("Public Share Detected:", noteId);
+      setPublicNotebookId(noteId);
+      setView('PUBLIC_FLASHCARD');
+      return; // Skip normal auth flow for public view
+    }
 
     // Check saved session first to ensure token is ready for fetch
     const init = async () => {
@@ -360,6 +373,28 @@ const App: React.FC = () => {
 
       {/* Render View */}
       <main className="pb-10">
+        {view === 'PUBLIC_FLASHCARD' && publicNotebookId && (
+          <div className="fixed inset-0 bg-slate-50 z-50 flex flex-col">
+            <div className="bg-white p-4 shadow-sm flex justify-between items-center px-8">
+              <div className="flex items-center gap-2">
+                <div className="bg-green-600 text-white w-8 h-8 rounded flex items-center justify-center">
+                  <i className="fas fa-layer-group"></i>
+                </div>
+                <h2 className="font-bold text-slate-800 text-lg">Sırça Akademi Flashcard</h2>
+              </div>
+              <button
+                onClick={() => { window.location.href = window.location.pathname; }}
+                className="text-sm font-bold text-blue-600 hover:underline"
+              >
+                Giriş Yap / Ana Sayfa
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto">
+              <import('./components/FlashcardMode').default notebookId={publicNotebookId} />
+            </div>
+          </div>
+        )}
+
         {view === 'USER_LOGIN' && (
           <>
             <div className="max-w-4xl mx-auto mt-12 grid md:grid-cols-2 gap-8 px-4">
