@@ -12,15 +12,23 @@ import { Session } from '@supabase/supabase-js';
 const App: React.FC = () => {
   // Navigation State
   // Lazy init to check URL immediately
+  // Navigation State
+  // Robust Lazy Init: Check both search params AND hash params
   const [view, setView] = useState<ViewState | 'PUBLIC_FLASHCARD'>(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('share') === 'flashcard') return 'PUBLIC_FLASHCARD';
+    const fullUrl = window.location.href;
+    const hasFlashcardParams = fullUrl.includes('share=flashcard') && fullUrl.includes('notebookId=');
+
+    if (hasFlashcardParams) {
+      return 'PUBLIC_FLASHCARD';
+    }
     return 'USER_LOGIN';
   });
 
   const [publicNotebookId, setPublicNotebookId] = useState<string | null>(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('notebookId');
+    const fullUrl = window.location.href;
+    // Extract notebookId carefully from anywhere in the URL string
+    const match = fullUrl.match(/[?&]notebookId=([^&]+)/);
+    return match ? match[1] : null;
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -81,8 +89,11 @@ const App: React.FC = () => {
 
     // Check for public share link first
     // If we initialized into PUBLIC_FLASHCARD, skip auth init
+    // Check for public share link first
+    // If we initialized into PUBLIC_FLASHCARD, skip auth init completely
+    // We double check the state here to be absolutely sure
     if (view === 'PUBLIC_FLASHCARD') {
-      console.log("Public Share Active, skipping auth check.");
+      console.log("Public Share Mode Active. Skipping Auth/Session Logic.");
       return;
     }
 
