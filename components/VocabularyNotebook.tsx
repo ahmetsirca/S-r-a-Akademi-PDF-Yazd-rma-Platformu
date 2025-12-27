@@ -32,6 +32,34 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
     const loadNotebooks = async () => {
         setLoading(true);
         const data = await DBService.getNotebooks(userId);
+
+        // --- AUTO MIGRATION CHECK ---
+        // If no "Genel (Eski)" exists, but old vocab exists, migrate it now.
+        const legacyNotebook = data.find(n => n.title === 'Genel (Eski)');
+        if (!legacyNotebook) {
+            const oldVocab = await DBService.getVocab(userId);
+            if (oldVocab && oldVocab.length > 0) {
+                // Perform migration
+                console.log("Migrating legacy vocabulary...");
+                const newNb = await DBService.createNotebook(userId, 'Genel (Eski)');
+                if (newNb) {
+                    // Add all words
+                    // Note: This might be slow if there are thousands.
+                    // Ideally we use backend migration, but client-side fallback is requested.
+                    for (const w of oldVocab) {
+                        await DBService.addNotebookWord(newNb.id, w.wordEn, w.wordTr);
+                        // Optional: Delete from old table? Not deleting for safety.
+                    }
+                    // Refresh data
+                    const refreshedData = await DBService.getNotebooks(userId);
+                    setNotebooks(refreshedData);
+                    setLoading(false);
+                    return;
+                }
+            }
+        }
+        // -----------------------------
+
         setNotebooks(data);
         setLoading(false);
     };
