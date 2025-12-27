@@ -250,6 +250,49 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(window.innerWidth);
 
+  // Mobile UI & Fullscreen State
+  const [showControls, setShowControls] = useState(true);
+  const lastScrollY = useRef(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    }
+  };
+
+  // Scroll Handler for Auto-Hiding UI
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const currentScrollY = e.currentTarget.scrollTop;
+
+    // Threshold to prevent jitter
+    if (Math.abs(currentScrollY - lastScrollY.current) > 10) {
+      if (currentScrollY > lastScrollY.current && currentScrollY > 50) {
+        // Scrolling Down - Hide
+        setShowControls(false);
+      } else {
+        // Scrolling Up - Show
+        setShowControls(true);
+      }
+      lastScrollY.current = currentScrollY;
+    }
+  };
+
+  // Toggle controls on tap (if not drawing)
+  const handleContentClick = () => {
+    if (toolMode === 'CURSOR') {
+      setShowControls(prev => !prev);
+    }
+  };
+
   // Persistence (Last Page)
   useEffect(() => {
     const saved = localStorage.getItem(`sirca_lp_${book.id}`);
@@ -510,11 +553,11 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
   return (
     <div
-      className={`fixed inset-0 bg-slate-900 flex flex-col z-50 select-none ${!isFocused ? 'blur-xl' : ''}`}
+      className={`fixed top-0 left-0 w-full h-[100dvh] bg-slate-900 flex flex-col z-50 select-none ${!isFocused ? 'blur-xl' : ''}`}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Sidebar Toolbar - Desktop */}
-      <div className="absolute top-1/2 left-4 md:flex flex-col gap-2 bg-slate-800 border border-slate-600 rounded-xl p-2 hidden transform -translate-y-1/2 shadow-2xl z-[60]">
+      <div className={`absolute top-1/2 left-4 md:flex flex-col gap-2 bg-slate-800 border border-slate-600 rounded-xl p-2 hidden transform -translate-y-1/2 shadow-2xl z-[60] transition-opacity duration-300 ${showControls ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
         <button onClick={() => setToolMode('CURSOR')}
           className={`p-3 rounded-lg transition ${toolMode === 'CURSOR' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`} title="Seçim / İmleç">
           <i className="fas fa-mouse-pointer"></i>
@@ -558,12 +601,17 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       </div>
 
       {/* Top Header */}
-      <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shadow-lg shrink-0 z-[60]">
+      <div className={`bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shadow-lg shrink-0 z-[60] transition-transform duration-300 absolute w-full md:relative ${showControls ? 'translate-y-0' : '-translate-y-full md:translate-y-0'}`}>
         <div className="flex items-center gap-4">
           <button onClick={onExit} className="text-white hover:bg-slate-700 p-2 rounded"><i className="fas fa-arrow-left"></i></button>
           <h2 className="text-white font-bold truncate max-w-[150px] md:max-w-md">{book.name}</h2>
         </div>
         <div className="flex items-center gap-2">
+          {/* Fullscreen Toggle (Mobile/Desktop) */}
+          <button onClick={toggleFullscreen} className="bg-slate-700 text-white p-2 rounded hover:bg-slate-600 hidden md:block" title="Tam Ekran">
+            <i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'}`}></i>
+          </button>
+
           <div className="bg-slate-700 rounded flex items-center mr-2">
             <button onClick={() => handleZoom(-0.2)} className="p-2 text-white"><i className="fas fa-minus"></i></button>
             <span className="text-white text-sm w-12 text-center">{Math.round(scale * 100)}%</span>
@@ -577,7 +625,13 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       </div>
 
       {/* Scrollable Content */}
-      <div ref={containerRef} className="flex-1 overflow-auto bg-slate-500 relative flex flex-col items-center pt-8 pb-24" onWheel={handleWheel}>
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-auto bg-slate-500 relative flex flex-col items-center pt-20 pb-20 md:pt-8 md:pb-8 transition-all duration-300"
+        onWheel={handleWheel}
+        onScroll={handleScroll}
+        onClick={handleContentClick}
+      >
         {!isFocused && <div className="fixed inset-0 z-[100] bg-black/50 text-white flex items-center justify-center text-2xl font-bold">Odaklanın</div>}
 
         {pdfUrl ? (
@@ -642,7 +696,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       </div>
 
       {/* Mobile Bottom Toolbar (Unified) - Increased Z-Index to prevent Canvas blockage */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 p-2 z-[150] pb-6">
+      <div className={`md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 p-2 z-[150] pb-6 transition-transform duration-300 ${showControls ? 'translate-y-0' : 'translate-y-full'}`}>
         <div className="flex justify-between items-center px-4">
           {/* Tools */}
           <div className="flex gap-2">
@@ -678,6 +732,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
           {/* Actions */}
           <div className="flex gap-2">
+            <button onClick={toggleFullscreen} className="p-3 text-slate-300 active:text-white bg-slate-800 rounded-lg"><i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'}`}></i></button>
             <button onClick={undoAnnotation} className="p-3 text-slate-300 active:text-white"><i className="fas fa-undo text-lg"></i></button>
             <div className="w-px h-8 bg-slate-700 mx-1 self-center"></div>
             {/* Active Color Preview */}
