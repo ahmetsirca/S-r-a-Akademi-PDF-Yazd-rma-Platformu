@@ -1,7 +1,15 @@
-
+```typescript
 import React, { useState, useEffect } from 'react';
 import { StorageService } from '../services/storage';
 import { PDFBook, AccessKey, Collection } from '../types';
+
+import * as pdfjsLib from 'pdfjs-dist';
+import mammoth from 'mammoth';
+import { QuestionParser, ParsedQuestion } from '../utils/QuestionParser';
+import { QuizService } from '../services/db';
+
+// Worker setup for PDF.js (Client-side)
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface AdminDashboardProps {
   onLogout: () => void;
