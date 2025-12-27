@@ -24,6 +24,7 @@ interface AnnotationPath {
 interface SinglePDFPageProps {
   pageNumber: number;
   width: number;       // The High-Res Render Width
+  height?: number;     // The Visual Height (for clipping)
   displayScale: number; // The CSS Scale Factor
   toolMode: 'CURSOR' | 'PEN' | 'HIGHLIGHTER' | 'ERASER';
   penColor: string;
@@ -33,7 +34,7 @@ interface SinglePDFPageProps {
   devicePixelRatio?: number;
 }
 
-const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, width, displayScale, toolMode, penColor, annotations, onAnnotationAdd, onPageLoad, devicePixelRatio }) => {
+const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, width, height, displayScale, toolMode, penColor, annotations, onAnnotationAdd, onPageLoad, devicePixelRatio }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
   const currentPath = useRef<{ x: number, y: number }[]>([]);
@@ -173,10 +174,10 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, width, displa
   // Layout Width = width * displayScale
 
   return (
-    <div className="relative shadow-lg group origin-top-left"
+    <div className="relative shadow-lg group origin-top-left bg-white overflow-hidden"
       style={{
         width: width * displayScale,
-        minHeight: width * 1.4 * displayScale // Placeholder approximation
+        height: height ? height : undefined // Strictly enforce height if provided
       }}>
 
       {/* High-Res Content Container with Transform */}
@@ -184,6 +185,7 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, width, displa
         className="origin-top-left"
         style={{
           width: width,
+          height: width * 1.414, // Force internal layout height roughly
           transform: `scale(${displayScale})`
         }}
       >
@@ -1065,6 +1067,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
                         <SinglePDFPage
                           pageNumber={pageNum}
                           width={renderedWidth} // Pass Fixed High-Res Width
+                          height={visualHeight} // Pass Visual Height for clipping
                           displayScale={displayScale} // Pass CSS Scale
                           toolMode={toolMode}
                           penColor={penColor}
