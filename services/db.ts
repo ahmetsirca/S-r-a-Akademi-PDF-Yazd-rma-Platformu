@@ -151,6 +151,7 @@ export const DBService = {
     const { data, error } = await supabase.from('vocab_stories').insert({ notebook_id: notebookId, title, content }).select().single();
     if (error) {
       console.error("DB Create Story Error:", error);
+      throw error; // Throw so UI can catch and show message
     }
     if (data) return { ...data, notebookId: data.notebook_id, createdAt: data.created_at };
     return null;

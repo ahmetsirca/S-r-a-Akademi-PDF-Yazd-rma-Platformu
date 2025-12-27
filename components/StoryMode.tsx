@@ -42,21 +42,27 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
         if (!title || !content) return;
         let success = false;
 
+        console.log(`[StoryMode] Attempting save. NotebookID: ${notebookId}, Title: ${title}`);
+
+        if (!notebookId) {
+            alert("HATA: Defter ID bulunamadı (notebookId is null). Lütfen sayfayı yenileyip tekrar deneyin.");
+            return;
+        }
+
         try {
             if (editingId) {
                 console.log("Updating story...", editingId);
                 const res = await DBService.updateStory(editingId, title, content);
-                success = !!res; // updateStory returns null/error logic might fail silent loops so check result
+                success = !!res;
             } else {
                 console.log("Creating new story...");
                 const res = await DBService.createStory(notebookId, title, content);
-                if (res) {
-                    success = true;
-                    // If created, we might want to switch to edit mode to prevent duplicates if clicked again?
-                    // But for now clear form is safer UX.
-                } else {
-                    console.error("Create Story returned null");
+
+                // Detailed Debug Check
+                if (!res) {
+                    throw new Error("DBService.createStory returned null without throwing. Check console or network tab.");
                 }
+                success = true;
             }
 
             if (success) {
@@ -77,12 +83,20 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                 }
                 setEditingId(null);
                 loadData();
-            } else {
-                alert("Kayıt işlemi başarısız. Veritabanı izniniz eksik olabilir.\n\nLütfen 'SQL Editor' üzerinden 'vocab_stories' tablosu için RLS ayarını kapatın.");
             }
-        } catch (e) {
-            console.error("Save Story Error:", e);
-            alert("Kayıt sırasında teknik bir hata oluştu: " + e);
+        } catch (e: any) {
+            console.error("Save Story Error Detail:", e);
+
+            // Analyze Error Message for common Supabase/Postgres codes
+            const msg = e.message || JSON.stringify(e);
+
+            if (msg.includes("row level security") || msg.includes("policy")) {
+                alert("İZİN HATASI: Veritabanı güvenlik politikası (RLS) yazmayı engelliyor.\n\nÇÖZÜM: 'repair_vocab_permissions.sql' dosyasını çalıştırın.");
+            } else if (msg.includes("foreign key constraint") || msg.includes("violates foreign key")) {
+                alert(`VERİ TUTARSIZLIĞI HATASI:\n\nBu hikayeyi eklemeye çalıştığınız Defter (ID: ${notebookId}) veritabanında bulunamadı.\n\nBu durum, defteri sildiyseniz veya senkronizasyon hatası olduysa yaşanır. Lütfen ana sayfaya dönüp tekrar deneyin.`);
+            } else {
+                alert(`TEKNİK HATA OLUŞTU:\n\nMesaj: ${msg}\n\nLütfen bu hatayı geliştiriciye iletin.`);
+            }
         }
     };
 
