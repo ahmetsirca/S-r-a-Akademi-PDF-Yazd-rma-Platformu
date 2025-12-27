@@ -451,7 +451,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                 </div>
 
                 {/* Book Page Container */}
-                <div className="flex-1 overflow-auto flex justify-center pb-10">
+                <div className="flex-1 overflow-auto flex justify-center items-start pb-10">
                     {title || content ? (
                         <article className={`bg-white shadow-sm border border-slate-100 p-8 md:p-12 max-w-[800px] w-full mx-auto transition-all ${isFullscreen ? 'shadow-2xl my-4 min-h-[calc(100vh-100px)]' : 'min-h-full'}`}>
 
