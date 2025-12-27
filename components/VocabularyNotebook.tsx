@@ -25,6 +25,24 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
     const [editingNotebookId, setEditingNotebookId] = useState<string | null>(null);
     const [editTitle, setEditTitle] = useState('');
 
+
+    // Manual Backup List provided by user
+    const BACKUP_VOCAB_LIST = [
+        { term: "stubborn", definition: "inatçı, dikkafalı" },
+        { term: "It's because", definition: "Çünkü, sebebi şu ki" },
+        { term: "Everybody around", definition: "Etraftaki herkes" },
+        { term: "Ever since", definition: "O zamandan beri" },
+        { term: "Managing director", definition: "Genel Müdür" },
+        { term: "deteriorating", definition: "Bozmak, kötüleşmek" },
+        { term: "machinery business", definition: "makine işletmesi" },
+        { term: "Traditional craft", definition: "Geleneksel El Sanatı" },
+        { term: "Quitting", definition: "bırakmak, vazgeçmek, işi/alışkanlığı terk etmek" },
+        { term: "Quite often recently", definition: "oldukça sık, epey sık" },
+        { term: "Unbearable", definition: "dayanılmaz, katlanılamaz, tahammül edilemez." },
+        { term: "he", definition: "o" },
+        { term: "apple", definition: "elma" }
+    ];
+
     useEffect(() => {
         loadNotebooks();
     }, [userId]);
@@ -54,23 +72,37 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
         }
 
         if (shouldMigrate) {
+            console.log("Checking migration sources...");
             const oldVocab = await DBService.getVocab(userId);
-            if (oldVocab && oldVocab.length > 0) {
-                console.log("Migrating legacy vocabulary (Robust Mode)...");
 
-                // Create if needed
+            // Source 1: Legacy Database Table
+            if (oldVocab && oldVocab.length > 0) {
+                console.log("Migrating from DB Table...");
                 if (!targetNotebookId) {
                     const newNb = await DBService.createNotebook(userId, 'Genel (Eski)');
                     if (newNb) targetNotebookId = newNb.id;
                 }
-
                 if (targetNotebookId) {
-                    // Add all words
                     for (const w of oldVocab) {
                         await DBService.addNotebookWord(targetNotebookId, w.wordEn, w.wordTr);
                     }
-
-                    // Refresh data
+                    const refreshedData = await DBService.getNotebooks(userId);
+                    setNotebooks(refreshedData);
+                    setLoading(false);
+                    return;
+                }
+            }
+            // Source 2: Hardcoded Backup (Emergency Restore)
+            else if (BACKUP_VOCAB_LIST.length > 0) {
+                console.log("Restoring from Backup List...");
+                if (!targetNotebookId) {
+                    const newNb = await DBService.createNotebook(userId, 'Genel (Eski)');
+                    if (newNb) targetNotebookId = newNb.id;
+                }
+                if (targetNotebookId) {
+                    for (const w of BACKUP_VOCAB_LIST) {
+                        await DBService.addNotebookWord(targetNotebookId, w.term, w.definition);
+                    }
                     const refreshedData = await DBService.getNotebooks(userId);
                     setNotebooks(refreshedData);
                     setLoading(false);
