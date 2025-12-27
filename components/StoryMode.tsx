@@ -374,10 +374,10 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             <div
                 ref={viewerRef}
                 onMouseUp={handleMouseUp}
-                className={`bg-slate-50 p-6 rounded-xl border border-slate-200 shadow-inner overflow-auto select-text flex flex-col ${isFullscreen ? 'h-full max-w-4xl mx-auto shadow-2xl scale-100' : 'h-full min-h-[400px]'}`}
+                className={`bg-slate-100/50 p-4 rounded-xl border border-slate-200 shadow-inner overflow-hidden flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-slate-100 p-0 rounded-none' : 'h-full min-h-[400px]'}`}
             >
                 {/* Toolbar */}
-                <div className="flex justify-end gap-2 mb-4 border-b border-slate-200 pb-2">
+                <div className={`flex justify-end gap-2 mb-4 border-b border-slate-200 pb-2 ${isFullscreen ? 'p-4 bg-white shadow-sm' : ''}`}>
                     <div className="relative">
                         <button
                             onClick={(e) => { e.stopPropagation(); setShowShareMenu(!showShareMenu); }}
@@ -416,19 +416,22 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                     </button>
                 </div>
 
-                {title || content ? (
-                    <article className="prose prose-slate max-w-none flex-1">
-                        <h2 className="text-2xl font-bold text-slate-800 mb-4 text-center">{title || 'Başlıksız Hikaye'}</h2>
-                        <div className="text-lg leading-loose text-slate-700 font-serif">
-                            {renderInteractiveContent(content)}
+                {/* Book Page Container */}
+                <div className="flex-1 overflow-auto flex justify-center pb-10">
+                    {title || content ? (
+                        <article className={`bg-white shadow-sm border border-slate-100 p-8 md:p-12 max-w-[800px] w-full mx-auto transition-all ${isFullscreen ? 'shadow-2xl my-4 min-h-[calc(100vh-100px)]' : 'min-h-full'}`}>
+                            <h2 className="text-3xl font-bold text-slate-800 mb-8 text-center font-serif tracking-wide border-b border-slate-100 pb-4">{title || 'Başlıksız Hikaye'}</h2>
+                            <div className="text-xl leading-loose text-slate-800 font-serif break-words">
+                                {renderInteractiveContent(content)}
+                            </div>
+                        </article>
+                    ) : (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                            <i className="fas fa-book-reader text-4xl mb-4"></i>
+                            <p className="text-center px-4">Hikayeni yazmaya başla veya soldan bir hikaye seç. <br /><span className="text-xs mt-2 block opacity-70">Çevirmek veya dinlemek için metni seçin.</span></p>
                         </div>
-                    </article>
-                ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                        <i className="fas fa-book-reader text-4xl mb-4"></i>
-                        <p className="text-center px-4">Hikayeni yazmaya başla veya soldan bir hikaye seç. <br /><span className="text-xs mt-2 block opacity-70">Çevirmek veya dinlemek için metni seçin.</span></p>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
         </div>
     );
