@@ -851,17 +851,19 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   }, []);
 
   // Calculate generic page width/height for placeholders
-  // RENDER SCALE: Fixed High Quality (e.g., 1.5x or 2.0x base) for crisp text without re-renders
-  const RENDER_QUALITY = 1.5;
+  // RENDER SCALE: Increased to 3.0x (Ultra Quality) to handle zoom up to 300% without blur.
+  const RENDER_QUALITY = 3.0;
   const getPageWidth = () => containerWidth > 0 ? Math.min(containerWidth - 32, 1000) : 800;
 
   // The actual pixels we render into the canvas (High Res)
-  const renderedWidth = getPageWidth() * RENDER_QUALITY;
+  // We cap at 4096px which is safe for almost all mobile browsers (Max Texture Size)
+  const renderedWidth = Math.min(getPageWidth() * RENDER_QUALITY, 4096);
 
   // The CSS scale applied to show the user the correct size
-  // If user wants 3.0x zoom, and we rendered at 1.5x, we need Display Scale 2.0x.
-  // Formula: UserScale / RenderQuality
-  const displayScale = scale / RENDER_QUALITY;
+  // Formula: UserScale / (RenderedWidth / PageWidth)
+  // Roughly: UserScale / RENDER_QUALITY (if not capped)
+  const effectiveRenderScale = renderedWidth / getPageWidth();
+  const displayScale = scale / effectiveRenderScale;
 
   // Layout Height for Virtualization (This must match the VISUAL height in DOM)
   // pageHeights stores the HIGH RES height (from onPageLoad)
