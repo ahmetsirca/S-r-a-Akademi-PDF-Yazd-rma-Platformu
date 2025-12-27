@@ -250,6 +250,131 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(window.innerWidth);
 
+  // --- SEARCH STATE ---
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<number[]>([]); // Page numbers
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // --- PAGE JUMP STATE ---
+  const [isJumpOpen, setIsJumpOpen] = useState(false);
+  const [jumpTarget, setJumpTarget] = useState("");
+
+  // --- PINCH ZOOM STATE ---
+  const touchStartDist = useRef<number | null>(null);
+  const touchStartScale = useRef<number>(1);
+
+  // Helper: Distance between two touches
+  const getTouchDist = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) return null;
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const dist = getTouchDist(e);
+      if (dist) {
+        touchStartDist.current = dist;
+        touchStartScale.current = scale;
+      }
+    }
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && touchStartDist.current) {
+      const dist = getTouchDist(e);
+      if (dist) {
+        const scaleFactor = dist / touchStartDist.current;
+        const newScale = Math.min(Math.max(0.5, touchStartScale.current * scaleFactor), 3.0);
+        setScale(newScale);
+        e.preventDefault(); // Prevent native browser zoom
+      }
+    }
+  };
+
+  const onTouchEnd = () => {
+    touchStartDist.current = null;
+  };
+
+  // --- SEARCH LOGIC ---
+  const [pdfDocument, setPdfDocument] = useState<any>(null); // Store ref to PDF doc
+
+  const performSearch = async () => {
+    if (!query || !pdfDocument || !numPages) return;
+    setIsSearching(true);
+    setSearchResults([]);
+    setCurrentSearchIndex(0);
+
+    const queryLower = query.toLowerCase();
+    const results: number[] = [];
+
+    try {
+      // Chunked Search to prevent UI freeze
+      const batchSize = 10;
+      for (let i = 1; i <= numPages; i += batchSize) {
+        const promises = [];
+        for (let j = 0; j < batchSize && i + j <= numPages; j++) {
+          promises.push(pdfDocument.getPage(i + j).then((page: any) =>
+            page.getTextContent().then((content: any) => ({
+              pageNum: i + j,
+              text: content.items.map((item: any) => item.str).join(' ').toLowerCase()
+            }))
+          ));
+        }
+        const chunkResults = await Promise.all(promises);
+        chunkResults.forEach(res => {
+          if (res.text.includes(queryLower)) results.push(res.pageNum);
+        });
+      }
+
+      setSearchResults(results);
+      if (results.length > 0) {
+        setCurrentPage(results[0]);
+        // Auto scroll handling is in useEffect for currentPage
+      } else {
+        alert("Sonuç bulunamadı.");
+      }
+    } catch (err) {
+      console.error("Search Error:", err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const nextResult = () => {
+    if (searchResults.length === 0) return;
+    const newIndex = (currentSearchIndex + 1) % searchResults.length;
+    setCurrentSearchIndex(newIndex);
+    setCurrentPage(searchResults[newIndex]);
+  };
+
+  const prevResult = () => {
+    if (searchResults.length === 0) return;
+    const newIndex = (currentSearchIndex - 1 + searchResults.length) % searchResults.length;
+    setCurrentSearchIndex(newIndex);
+    setCurrentPage(searchResults[newIndex]);
+  };
+
+  // Variable alias for UI
+  const query = searchQuery;
+
+  // --- JUMP LOGIC ---
+  const handleJumpSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const p = parseInt(jumpTarget);
+    if (!isNaN(p) && p >= 1 && p <= (numPages || 1)) {
+      setCurrentPage(p);
+      setIsJumpOpen(false);
+      setJumpTarget("");
+      // Scroll happens via existing useEffect
+    } else {
+      alert("Geçersiz sayfa numarası.");
+    }
+  };
+
   // Mobile UI & Fullscreen State
   const [showControls, setShowControls] = useState(true);
   const lastScrollY = useRef(0);
@@ -604,7 +729,12 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       <div className={`bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shadow-lg shrink-0 z-[60] transition-transform duration-300 absolute w-full md:relative ${showControls ? 'translate-y-0' : '-translate-y-full md:translate-y-0'}`}>
         <div className="flex items-center gap-4">
           <button onClick={onExit} className="text-white hover:bg-slate-700 p-2 rounded"><i className="fas fa-arrow-left"></i></button>
-          <h2 className="text-white font-bold truncate max-w-[150px] md:max-w-md">{book.name}</h2>
+
+          <button onClick={() => setIsSearchOpen(!isSearchOpen)} className="text-slate-300 hover:text-white p-2 rounded">
+            <i className="fas fa-search"></i>
+          </button>
+
+          <h2 className="text-white font-bold truncate max-w-[100px] md:max-w-md hidden md:block">{book.name}</h2>
         </div>
         <div className="flex items-center gap-2">
           {/* Fullscreen Toggle (Mobile/Desktop) */}
@@ -624,13 +754,58 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         </div>
       </div>
 
-      {/* Scrollable Content */}
+      {/* Search Bar - Slides down under header */}
+      <div className={`absolute top-[70px] left-0 right-0 bg-slate-800 p-2 z-[55] flex items-center gap-2 justify-center transition-all duration-300 shadow-md ${isSearchOpen ? 'translate-y-0 opacity-100' : '-translate-y-10 opacity-0 pointer-events-none'}`}>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Ara..."
+          className="bg-slate-700 text-white px-3 py-1 rounded w-40 md:w-64 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          onKeyDown={(e) => e.key === 'Enter' && performSearch()}
+        />
+        <button onClick={() => performSearch()} className="text-white p-2">
+          {isSearching ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-search"></i>}
+        </button>
+        {searchResults.length > 0 && (
+          <span className="text-white text-xs">{currentSearchIndex + 1} / {searchResults.length}</span>
+        )}
+        <button onClick={prevResult} disabled={searchResults.length === 0} className="text-white p-2 disabled:opacity-30"><i className="fas fa-chevron-left"></i></button>
+        <button onClick={nextResult} disabled={searchResults.length === 0} className="text-white p-2 disabled:opacity-30"><i className="fas fa-chevron-right"></i></button>
+        <button onClick={() => setIsSearchOpen(false)} className="text-slate-400 p-2"><i className="fas fa-times"></i></button>
+      </div>
+
+      {/* Page Jump Modal */}
+      {isJumpOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" onClick={() => setIsJumpOpen(false)}>
+          <div className="bg-slate-800 p-6 rounded-xl shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-white font-bold mb-4">Sayfaya Git</h3>
+            <form onSubmit={handleJumpSubmit} className="flex gap-2">
+              <input
+                type="number"
+                min={1}
+                max={numPages || 1}
+                value={jumpTarget}
+                onChange={(e) => setJumpTarget(e.target.value)}
+                className="bg-slate-700 text-white p-2 rounded w-24 text-center"
+                autoFocus
+              />
+              <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded font-bold">Git</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Scrollable Content with Touch Events */}
       <div
         ref={containerRef}
         className="flex-1 overflow-auto bg-slate-500 relative flex flex-col items-center pt-20 pb-20 md:pt-8 md:pb-8 transition-all duration-300"
         onWheel={handleWheel}
         onScroll={handleScroll}
         onClick={handleContentClick}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
       >
         {!isFocused && <div className="fixed inset-0 z-[100] bg-black/50 text-white flex items-center justify-center text-2xl font-bold">Odaklanın</div>}
 
@@ -650,10 +825,13 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
             </div>
           ) : (
             <Document
-              key={pdfUrl} // Force remount if URL changes
+              key={pdfDocument ? 'loaded' : pdfUrl} // Simple key
               file={pdfUrl}
               options={options}
-              onLoadSuccess={onDocumentLoadSuccess}
+              onLoadSuccess={(pdf) => {
+                setPdfDocument(pdf); // Save doc ref for search
+                onDocumentLoadSuccess({ numPages: pdf.numPages });
+              }}
               onLoadError={(err) => {
                 console.error("PDF Load Error:", err);
                 // Switch to generic iframe fallback instead of just alerting
@@ -693,6 +871,13 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
             </Document>
           )
         ) : <div className="text-white">Dosya hazırlanıyor...</div>}
+      </div>
+
+      {/* Current Page Indicator / Jump Trigger */}
+      <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 bg-slate-800/90 px-4 py-2 rounded-full text-white text-sm font-bold shadow-lg z-[160] transition-opacity duration-300 backdrop-blur-sm cursor-pointer hover:bg-slate-700"
+        onClick={() => { setIsJumpOpen(true); setJumpTarget(currentPage.toString()); }}
+        style={{ opacity: showControls ? 1 : 0, pointerEvents: showControls ? 'auto' : 'none' }}>
+        {currentPage} / {numPages || '-'}
       </div>
 
       {/* Mobile Bottom Toolbar (Unified) - Increased Z-Index to prevent Canvas blockage */}
