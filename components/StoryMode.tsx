@@ -42,29 +42,47 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
         if (!title || !content) return;
         let success = false;
 
-        if (editingId) {
-            success = await DBService.updateStory(editingId, title, content);
-        } else {
-            const res = await DBService.createStory(notebookId, title, content);
-            success = !!res;
-        }
-
-        if (success) {
-            // Visual feedback
-            const btn = document.getElementById('save-btn');
-            if (btn) {
-                const originalText = btn.innerText;
-                btn.innerText = 'Kaydedildi! ✓';
-                btn.style.backgroundColor = '#16a34a'; // green-600
-                setTimeout(() => {
-                    btn.innerText = originalText;
-                    btn.style.backgroundColor = '';
-                }, 2000);
+        try {
+            if (editingId) {
+                console.log("Updating story...", editingId);
+                const res = await DBService.updateStory(editingId, title, content);
+                success = !!res; // updateStory returns null/error logic might fail silent loops so check result
+            } else {
+                console.log("Creating new story...");
+                const res = await DBService.createStory(notebookId, title, content);
+                if (res) {
+                    success = true;
+                    // If created, we might want to switch to edit mode to prevent duplicates if clicked again?
+                    // But for now clear form is safer UX.
+                } else {
+                    console.error("Create Story returned null");
+                }
             }
-            setTitle('');
-            setContent('');
-            setEditingId(null);
-            loadData();
+
+            if (success) {
+                // Visual feedback
+                const btn = document.getElementById('save-btn');
+                if (btn) {
+                    const originalText = btn.innerText;
+                    btn.innerText = 'Kaydedildi! ✓';
+                    btn.style.backgroundColor = '#16a34a'; // green-600
+                    setTimeout(() => {
+                        btn.innerText = originalText;
+                        btn.style.backgroundColor = '';
+                    }, 2000);
+                }
+                if (!editingId) {
+                    setTitle('');
+                    setContent('');
+                }
+                setEditingId(null);
+                loadData();
+            } else {
+                alert("Kayıt sırasında bir hata oluştu. Lütfen tekrar deneyin.");
+            }
+        } catch (e) {
+            console.error("Save Story Error:", e);
+            alert("Kayıt işlemi başarısız: " + e);
         }
     };
 
