@@ -92,4 +92,29 @@ export interface UserVocab {
   createdAt: string;
 }
 
+// -- NEW VOCABULARY NOTEBOOK TYPES --
+export interface VocabNotebook {
+  id: string;
+  userId: string;
+  parentId: string | null;
+  title: string;
+  createdAt: string;
+}
+
+export interface VocabWord {
+  id: string;
+  notebookId: string;
+  term: string;
+  definition: string;
+  createdAt: string;
+}
+
+export interface VocabStory {
+  id: string;
+  notebookId: string;
+  title: string;
+  content: string;
+  createdAt: string;
+}
+
 

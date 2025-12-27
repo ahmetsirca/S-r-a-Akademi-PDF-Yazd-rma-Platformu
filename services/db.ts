@@ -93,9 +93,69 @@ export const DBService = {
     return { data: mappedData, error };
   },
 
-  async deleteVocab(vocabId: string) {
-    let { error } = await supabase.from('user_vocab').delete().eq('id', vocabId);
-    return { error };
+  deleteVocab(vocabId: string) {
+    return supabase.from('user_vocab').delete().eq('id', vocabId);
+  },
+
+  // --- NEW VOCABULARY NOTEBOOKS ---
+  async getNotebooks(userId: string) {
+    const { data, error } = await supabase.from('vocab_notebooks').select('*').eq('user_id', userId).order('created_at', { ascending: true });
+    if (error) { console.error(error); return []; }
+    return data.map((n: any) => ({ ...n, parentId: n.parent_id, userId: n.user_id, createdAt: n.created_at }));
+  },
+
+  async createNotebook(userId: string, title: string, parentId: string | null = null) {
+    const { data, error } = await supabase.from('vocab_notebooks').insert({ user_id: userId, title, parent_id: parentId }).select().single();
+    if (data) return { ...data, parentId: data.parent_id, userId: data.user_id, createdAt: data.created_at };
+    return null;
+  },
+
+  async updateNotebook(id: string, title: string) {
+    return await supabase.from('vocab_notebooks').update({ title }).eq('id', id);
+  },
+
+  async deleteNotebook(id: string) {
+    return await supabase.from('vocab_notebooks').delete().eq('id', id);
+  },
+
+  // --- NEW VOCABULARY WORDS ---
+  async getNotebookWords(notebookId: string) {
+    const { data, error } = await supabase.from('vocab_words').select('*').eq('notebook_id', notebookId).order('created_at', { ascending: false });
+    return (data || []).map((w: any) => ({ ...w, notebookId: w.notebook_id, createdAt: w.created_at }));
+  },
+
+  async addNotebookWord(notebookId: string, term: string, definition: string) {
+    const { data } = await supabase.from('vocab_words').insert({ notebook_id: notebookId, term, definition }).select().single();
+    if (data) return { ...data, notebookId: data.notebook_id, createdAt: data.created_at };
+    return null;
+  },
+
+  async updateNotebookWord(id: string, term: string, definition: string) {
+    return await supabase.from('vocab_words').update({ term, definition }).eq('id', id);
+  },
+
+  async deleteNotebookWord(id: string) {
+    return await supabase.from('vocab_words').delete().eq('id', id);
+  },
+
+  // --- NEW VOCABULARY STORIES ---
+  async getNotebookStories(notebookId: string) {
+    const { data, error } = await supabase.from('vocab_stories').select('*').eq('notebook_id', notebookId).order('created_at', { ascending: false });
+    return (data || []).map((s: any) => ({ ...s, notebookId: s.notebook_id, createdAt: s.created_at }));
+  },
+
+  async createStory(notebookId: string, title: string, content: string) {
+    const { data } = await supabase.from('vocab_stories').insert({ notebook_id: notebookId, title, content }).select().single();
+    if (data) return { ...data, notebookId: data.notebook_id, createdAt: data.created_at };
+    return null;
+  },
+
+  async updateStory(id: string, title: string, content: string) {
+    return await supabase.from('vocab_stories').update({ title, content }).eq('id', id);
+  },
+
+  async deleteStory(id: string) {
+    return await supabase.from('vocab_stories').delete().eq('id', id);
   },
 
   // --- LOGS ---
