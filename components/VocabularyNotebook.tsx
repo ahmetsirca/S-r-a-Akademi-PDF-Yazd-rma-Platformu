@@ -34,22 +34,42 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
         const data = await DBService.getNotebooks(userId);
 
         // --- AUTO MIGRATION CHECK ---
-        // If no "Genel (Eski)" exists, but old vocab exists, migrate it now.
+        // Enhanced: If no "Genel (Eski)" exists OR it exists but is empty, check old vocab.
         const legacyNotebook = data.find(n => n.title === 'Genel (Eski)');
+        let targetNotebookId = legacyNotebook ? legacyNotebook.id : null;
+        let shouldMigrate = false;
+
+        // If not exists, will create.
         if (!legacyNotebook) {
+            shouldMigrate = true;
+        } else {
+            // If exists, check if empty
+            // optimization: we don't have word count in notebook summary yet.
+            // assume if user is asking for restore, we can check word count.
+            const words = await DBService.getNotebookWords(legacyNotebook.id);
+            if (words.length === 0) {
+                shouldMigrate = true;
+                targetNotebookId = legacyNotebook.id;
+            }
+        }
+
+        if (shouldMigrate) {
             const oldVocab = await DBService.getVocab(userId);
             if (oldVocab && oldVocab.length > 0) {
-                // Perform migration
-                console.log("Migrating legacy vocabulary...");
-                const newNb = await DBService.createNotebook(userId, 'Genel (Eski)');
-                if (newNb) {
+                console.log("Migrating legacy vocabulary (Robust Mode)...");
+
+                // Create if needed
+                if (!targetNotebookId) {
+                    const newNb = await DBService.createNotebook(userId, 'Genel (Eski)');
+                    if (newNb) targetNotebookId = newNb.id;
+                }
+
+                if (targetNotebookId) {
                     // Add all words
-                    // Note: This might be slow if there are thousands.
-                    // Ideally we use backend migration, but client-side fallback is requested.
                     for (const w of oldVocab) {
-                        await DBService.addNotebookWord(newNb.id, w.wordEn, w.wordTr);
-                        // Optional: Delete from old table? Not deleting for safety.
+                        await DBService.addNotebookWord(targetNotebookId, w.wordEn, w.wordTr);
                     }
+
                     // Refresh data
                     const refreshedData = await DBService.getNotebooks(userId);
                     setNotebooks(refreshedData);
