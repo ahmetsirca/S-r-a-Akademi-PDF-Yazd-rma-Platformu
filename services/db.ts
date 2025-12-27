@@ -106,6 +106,9 @@ export const DBService = {
 
   async createNotebook(userId: string, title: string, parentId: string | null = null) {
     const { data, error } = await supabase.from('vocab_notebooks').insert({ user_id: userId, title, parent_id: parentId }).select().single();
+    if (error) {
+      console.error("DB Create Notebook Error:", error);
+    }
     if (data) return { ...data, parentId: data.parent_id, userId: data.user_id, createdAt: data.created_at };
     return null;
   },
