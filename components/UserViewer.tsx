@@ -6,12 +6,12 @@ import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 // import '../index.css'; // Removed: Tailwind is loaded via CDN
 
-// Set worker source - Use Vite's explicit URL import for perfect pathing
-import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
+// Set worker source - Use reliable CDN to prevent Vercel build MIME type errors
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs`;
 
 import { DBService } from '../services/db';
 import { AuthService } from '../services/auth';
+
 
 // Types for Annotation
 interface AnnotationPath {
@@ -1008,18 +1008,20 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
           {!isFocused && <div className="fixed inset-0 z-[100] bg-black/50 text-white flex items-center justify-center text-2xl font-bold">Odaklanın</div>}
 
           {pdfUrl ? (
-            // Error Fallback: If React-PDF fails, show native Iframe
+            // Error Fallback: If React-PDF fails, show retry button (NEVER SHOW IFRAME)
             loadError ? (
-              <div className="w-full h-full flex flex-col items-center justify-center p-4">
-                <div className="bg-red-500/10 text-red-400 p-4 rounded-lg mb-4 text-center">
-                  <p className="font-bold">Gelişmiş görüntüleyici açılamadı.</p>
-                  <p className="text-sm">Standart görüntüleyiciye geçiliyor...</p>
+              <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-slate-900 text-white">
+                <div className="bg-red-500/10 text-red-400 p-8 rounded-2xl mb-4 text-center max-w-md border border-red-500/30">
+                  <i className="fas fa-exclamation-triangle text-4xl mb-4"></i>
+                  <p className="font-bold text-lg mb-2">Görüntüleyici Yüklenemedi</p>
+                  <p className="text-sm text-slate-300 mb-6">Güvenlik nedeniyle standart görüntüleyici devre dışı bırakılmıştır. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.</p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl font-bold transition flex items-center justify-center mx-auto gap-2"
+                  >
+                    <i className="fas fa-sync-alt"></i> Sayfayı Yenile
+                  </button>
                 </div>
-                <iframe
-                  src={pdfUrl}
-                  className="w-full h-[80vh] bg-white rounded-lg shadow-xl"
-                  title="PDF Viewer"
-                />
               </div>
             ) : (
               <Document
