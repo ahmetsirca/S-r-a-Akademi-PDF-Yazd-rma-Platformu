@@ -516,7 +516,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
   // Intersection Observer
   useEffect(() => {
-    if (!numPages) return;
+    if (!numPages || !containerRef.current) return;
+
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
@@ -525,14 +526,18 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
           if (!isNaN(num)) setCurrentPage(num);
         }
       });
-    }, { threshold: 0.1, rootMargin: "-10% 0px -10% 0px" }); // Improved margin for better trigger
+    }, {
+      root: containerRef.current, // Explicitly set scroll container as root
+      threshold: 0.1,
+      rootMargin: "100% 0px 100% 0px" // Pre-load pages well before they appear
+    });
 
     for (let i = 1; i <= numPages; i++) {
       const el = document.getElementById(`page-${i}`);
       if (el) observer.observe(el);
     }
     return () => observer.disconnect();
-  }, [numPages, pdfUrl]);
+  }, [numPages, pdfUrl, containerRef.current]);
 
   const handleZoom = (delta: number) => {
     setScale(prev => Math.min(Math.max(0.5, prev + delta), 3.0));
@@ -842,8 +847,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
             >
               {numPages && Array.from(new Array(numPages)).map((_, index) => {
                 const pageNum = index + 1;
-                // Virtualization: Only render pages around the current one
-                const isVisible = Math.abs(pageNum - currentPage) <= 2;
+                // Virtualization: Increased window to prevent blank pages during fast scroll
+                const isVisible = Math.abs(pageNum - currentPage) <= 5;
                 const height = pageHeights[pageNum] || estimatedHeight;
 
                 return (
