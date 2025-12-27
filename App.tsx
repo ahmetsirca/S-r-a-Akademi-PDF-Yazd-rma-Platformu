@@ -12,24 +12,57 @@ import { Session } from '@supabase/supabase-js';
 const App: React.FC = () => {
   // Navigation State
   // Lazy init to check URL immediately
-  // Navigation State
-  // Robust Lazy Init: Check both search params AND hash params
-  const [view, setView] = useState<ViewState | 'PUBLIC_FLASHCARD'>(() => {
-    const fullUrl = window.location.href;
-    const hasFlashcardParams = fullUrl.includes('share=flashcard') && fullUrl.includes('notebookId=');
+  // --- GOOGLE-GRADE ROUTING FIX ---
+  // Bifurcate the app logic immediately. If this is a public share, we DO NOT want to run any Auth logic.
+  // We check the URL strictly and return early.
+  const [isPublicMode, setIsPublicMode] = useState(false);
+  const [publicNoteId, setPublicNoteId] = useState<string | null>(null);
 
-    if (hasFlashcardParams) {
-      return 'PUBLIC_FLASHCARD';
+  useEffect(() => {
+    // Run this ONCE on mount, synchronously-ish
+    const fullUrl = window.location.href;
+    if (fullUrl.includes('share=flashcard') && fullUrl.includes('notebookId=')) {
+      console.log("🚀 Public Mode Detected via Robust URL Check");
+      const match = fullUrl.match(/[?&]notebookId=([^&]+)/);
+      if (match && match[1]) {
+        setPublicNoteId(match[1]);
+        setIsPublicMode(true);
+        // Stop further execution of parent effects by state bifurcation
+      }
     }
-    return 'USER_LOGIN';
-  });
+  }, []);
 
-  const [publicNotebookId, setPublicNotebookId] = useState<string | null>(() => {
-    const fullUrl = window.location.href;
-    // Extract notebookId carefully from anywhere in the URL string
-    const match = fullUrl.match(/[?&]notebookId=([^&]+)/);
-    return match ? match[1] : null;
-  });
+  // --- EARLY RETURN FOR PUBLIC MODE ---
+  // This prevents any Auth logic, Session checks, or DB calls from interfering.
+  if (isPublicMode && publicNoteId) {
+    return (
+      <div className="fixed inset-0 bg-slate-50 z-50 flex flex-col">
+        <div className="bg-white p-4 shadow-sm flex justify-between items-center px-8">
+          <div className="flex items-center gap-2">
+            <div className="bg-green-600 text-white w-8 h-8 rounded flex items-center justify-center">
+              <i className="fas fa-layer-group"></i>
+            </div>
+            <h2 className="font-bold text-slate-800 text-lg">Sırça Akademi Flashcard</h2>
+          </div>
+          <button
+            onClick={() => { window.location.href = window.location.pathname; }}
+            className="text-sm font-bold text-blue-600 hover:underline"
+          >
+            Giriş Yap / Ana Sayfa
+          </button>
+        </div>
+        <div className="flex-1 overflow-auto">
+          <React.Suspense fallback={<div className="p-10 text-center">Yükleniyor...</div>}>
+            <FlashcardMode notebookId={publicNoteId} />
+          </React.Suspense>
+        </div>
+      </div>
+    );
+  }
+
+  // Navigation State
+  // Regular App Logic continues below ONLY if not public mode...
+  const [view, setView] = useState<ViewState>('USER_LOGIN');
 
   const [isLoading, setIsLoading] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
@@ -85,18 +118,6 @@ const App: React.FC = () => {
 
   // Initial Fetch & Auth Check
   useEffect(() => {
-    console.log('App Build Timestamp: 2025-12-27 22:00 - Public Share Added');
-
-    // Check for public share link first
-    // If we initialized into PUBLIC_FLASHCARD, skip auth init
-    // Check for public share link first
-    // If we initialized into PUBLIC_FLASHCARD, skip auth init completely
-    // We double check the state here to be absolutely sure
-    if (view === 'PUBLIC_FLASHCARD') {
-      console.log("Public Share Mode Active. Skipping Auth/Session Logic.");
-      return;
-    }
-
     // Check saved session first to ensure token is ready for fetch
     const init = async () => {
       setIsLoading(true);
@@ -131,6 +152,7 @@ const App: React.FC = () => {
 
     init();
   }, []);
+
 
   const fetchInitialData = async () => {
     try {
@@ -390,30 +412,6 @@ const App: React.FC = () => {
 
       {/* Render View */}
       <main className="pb-10">
-        {view === 'PUBLIC_FLASHCARD' && publicNotebookId && (
-          <div className="fixed inset-0 bg-slate-50 z-50 flex flex-col">
-            <div className="bg-white p-4 shadow-sm flex justify-between items-center px-8">
-              <div className="flex items-center gap-2">
-                <div className="bg-green-600 text-white w-8 h-8 rounded flex items-center justify-center">
-                  <i className="fas fa-layer-group"></i>
-                </div>
-                <h2 className="font-bold text-slate-800 text-lg">Sırça Akademi Flashcard</h2>
-              </div>
-              <button
-                onClick={() => { window.location.href = window.location.pathname; }}
-                className="text-sm font-bold text-blue-600 hover:underline"
-              >
-                Giriş Yap / Ana Sayfa
-              </button>
-            </div>
-            <div className="flex-1 overflow-auto">
-              <React.Suspense fallback={<div className="p-10 text-center">Yükleniyor...</div>}>
-                <FlashcardMode notebookId={publicNotebookId} />
-              </React.Suspense>
-            </div>
-          </div>
-        )}
-
         {view === 'USER_LOGIN' && (
           <>
             <div className="max-w-4xl mx-auto mt-12 grid md:grid-cols-2 gap-8 px-4">

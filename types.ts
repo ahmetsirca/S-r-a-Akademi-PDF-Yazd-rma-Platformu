@@ -82,7 +82,7 @@ export interface ActivityLog {
   createdAt: string;
 }
 
-export type ViewState = 'landing' | 'library' | 'notebook' | 'flashcards' | 'story' | 'settings' | 'admin';
+export type ViewState = 'landing' | 'library' | 'notebook' | 'flashcards' | 'story' | 'settings' | 'admin' | 'USER_LOGIN' | 'USER_FOLDER_VIEW' | 'USER_FOLDER_AUTH' | 'USER_VIEWER' | 'ADMIN_LOGIN' | 'ADMIN_DASHBOARD' | 'PUBLIC_FLASHCARD';
 
 export interface UserVocab {
   id: string;
