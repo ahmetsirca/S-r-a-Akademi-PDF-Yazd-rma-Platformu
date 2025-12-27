@@ -197,10 +197,13 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
     };
 
     const handleShare = async () => {
+        // GOOGLE-GRADE FIX: Generate the specific Public Link for the Native Share Sheet
+        const publicUrl = `${window.location.origin}/#/flashcard/${currentNotebook?.id}`;
+
         const shareData = {
             title: 'Sırça Akademi Kelime Defterim',
             text: `Sırça Akademi'de oluşturduğum "${currentNotebook?.title || 'Kelime'}" defterimi incele!`,
-            url: window.location.href
+            url: publicUrl // <--- FIXED: Now shares the PUBLIC link, not the dashboard link
         };
 
         if (navigator.share) {
@@ -210,8 +213,17 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
                 console.error("Share failed", err);
             }
         } else {
-            // Fallback: Copy to clipboard or show alert
-            alert("Paylaşım özelliği bu tarayıcıda desteklenmiyor, ancak linki kopyalayabilirsiniz.");
+            // Desktop / Fallback: Show the menu
+            // We can just return here and let the button onClick toggle the menu, 
+            // but the original code triggered this on the same clickable.
+            // Actually the button calls this. If share fails or not supported, we confusingly alert?
+            // The existing UI logic toggles 'showExportMenu' via a different button usually?
+            // Wait, looking at lines 421: button onClick={handleShare}.
+            // This button IS the share button.
+            // If native share is NOT supported, we should open our custom menu?
+            // Current logic: "Fallback: ... alert ...".
+            // BETTER: If native share fails/unsupported, OPEN THE CUSTOM DROPDOWN we built!
+            setShowExportMenu(true);
         }
     };
 
