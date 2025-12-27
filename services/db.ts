@@ -148,13 +148,21 @@ export const DBService = {
   },
 
   async createStory(notebookId: string, title: string, content: string) {
-    const { data } = await supabase.from('vocab_stories').insert({ notebook_id: notebookId, title, content }).select().single();
+    const { data, error } = await supabase.from('vocab_stories').insert({ notebook_id: notebookId, title, content }).select().single();
+    if (error) {
+      console.error("DB Create Story Error:", error);
+    }
     if (data) return { ...data, notebookId: data.notebook_id, createdAt: data.created_at };
     return null;
   },
 
   async updateStory(id: string, title: string, content: string) {
-    return await supabase.from('vocab_stories').update({ title, content }).eq('id', id);
+    const { error } = await supabase.from('vocab_stories').update({ title, content }).eq('id', id);
+    if (error) {
+      console.error("DB Update Story Error:", error);
+      return null;
+    }
+    return true;
   },
 
   async deleteStory(id: string) {
