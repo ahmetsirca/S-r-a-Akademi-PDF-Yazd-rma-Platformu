@@ -1076,94 +1076,93 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
                           {pageNum}
                         </div>
                       )}
-                      );
+                    </div>
+                  );
                 })}
-                    </Document>
-                  )
+              </Document>
+            )
           ) : <div className="text-white">Dosya hazırlanıyor...</div>}
-                <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/20 to-transparent pointer-events-none md:hidden" /> {/* Mobile shadow hint */}
-              </div> {/* End Inner Wrapper */}
-        </div>
+          <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/20 to-transparent pointer-events-none md:hidden" /> {/* Mobile shadow hint */}
+        </div> {/* End Inner Wrapper */}
+      </div>
 
-        {/* Current Page Indicator / Jump Trigger */}
-        <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 bg-slate-800/90 px-4 py-2 rounded-full text-white text-sm font-bold shadow-lg z-[160] transition-opacity duration-300 backdrop-blur-sm cursor-pointer hover:bg-slate-700"
-          onClick={() => { setIsJumpOpen(true); setJumpTarget(currentPage.toString()); }}
-          style={{ opacity: showControls ? 1 : 0, pointerEvents: showControls ? 'auto' : 'none' }}>
-          {currentPage} / {numPages || '-'}
-        </div>
+      {/* Current Page Indicator / Jump Trigger */}
+      <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 bg-slate-800/90 px-4 py-2 rounded-full text-white text-sm font-bold shadow-lg z-[160] transition-opacity duration-300 backdrop-blur-sm cursor-pointer hover:bg-slate-700"
+        onClick={() => { setIsJumpOpen(true); setJumpTarget(currentPage.toString()); }}
+        style={{ opacity: showControls ? 1 : 0, pointerEvents: showControls ? 'auto' : 'none' }}>
+        {currentPage} / {numPages || '-'}
+      </div>
 
-        {/* Mobile Bottom Toolbar (Unified) - Increased Z-Index to prevent Canvas blockage */}
-        <div className={`md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 p-2 z-[150] pb-6 transition-transform duration-300 ${showControls ? 'translate-y-0' : 'translate-y-full'}`}>
-          <div className="flex justify-between items-center px-4">
-            {/* Tools */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => setToolMode('CURSOR')}
-                className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'CURSOR' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
-              >
-                <i className="fas fa-mouse-pointer text-xl mb-1"></i>
-                <span className="text-[10px]">Seç</span>
-              </button>
-              <button
-                onClick={() => setToolMode('PEN')}
-                className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'PEN' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
-              >
-                <i className="fas fa-pen text-xl mb-1"></i>
-                <span className="text-[10px]">Kalem</span>
-              </button>
-              <button
-                onClick={() => setToolMode('HIGHLIGHTER')}
-                className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'HIGHLIGHTER' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
-              >
-                <i className="fas fa-highlighter text-xl mb-1"></i>
-                <span className="text-[10px]">Fosforlu</span>
-              </button>
-              <button
-                onClick={() => setToolMode('ERASER')}
-                className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'ERASER' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
-              >
-                <i className="fas fa-eraser text-xl mb-1"></i>
-                <span className="text-[10px]">Silgi</span>
-              </button>
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-2">
-              <button onClick={toggleFullscreen} className="p-3 text-slate-300 active:text-white bg-slate-800 rounded-lg"><i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'}`}></i></button>
-              <button onClick={undoAnnotation} className="p-3 text-slate-300 active:text-white"><i className="fas fa-undo text-lg"></i></button>
-              <div className="w-px h-8 bg-slate-700 mx-1 self-center"></div>
-              {/* Active Color Preview */}
-              <div className="relative group">
-                <button
-                  className="w-10 h-10 rounded-full border-2 border-white shadow-sm flex items-center justify-center"
-                  style={{ backgroundColor: penColor }}
-                  onClick={() => {
-                    // Cycle colors
-                    const colors = ['#EF4444', '#3B82F6', '#000000', '#10B981'];
-                    const idx = colors.indexOf(penColor);
-                    setPenColor(colors[(idx + 1) % colors.length]);
-                  }}
-                >
-                </button>
-              </div>
-            </div>
+      {/* Mobile Bottom Toolbar (Unified) - Increased Z-Index to prevent Canvas blockage */}
+      <div className={`md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 p-2 z-[150] pb-6 transition-transform duration-300 ${showControls ? 'translate-y-0' : 'translate-y-full'}`}>
+        <div className="flex justify-between items-center px-4">
+          {/* Tools */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setToolMode('CURSOR')}
+              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'CURSOR' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
+            >
+              <i className="fas fa-mouse-pointer text-xl mb-1"></i>
+              <span className="text-[10px]">Seç</span>
+            </button>
+            <button
+              onClick={() => setToolMode('PEN')}
+              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'PEN' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
+            >
+              <i className="fas fa-pen text-xl mb-1"></i>
+              <span className="text-[10px]">Kalem</span>
+            </button>
+            <button
+              onClick={() => setToolMode('HIGHLIGHTER')}
+              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'HIGHLIGHTER' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
+            >
+              <i className="fas fa-highlighter text-xl mb-1"></i>
+              <span className="text-[10px]">Fosforlu</span>
+            </button>
+            <button
+              onClick={() => setToolMode('ERASER')}
+              className={`flex flex-col items-center p-2 rounded-lg transition ${toolMode === 'ERASER' ? 'text-blue-500 bg-blue-500/10' : 'text-slate-400'}`}
+            >
+              <i className="fas fa-eraser text-xl mb-1"></i>
+              <span className="text-[10px]">Silgi</span>
+            </button>
           </div>
 
-          {/* Expanded Colors (Visible if Pen/Highlighter Active) */}
-          {(toolMode === 'PEN' || toolMode === 'HIGHLIGHTER') && (
-            <div className="flex justify-center gap-4 mt-3 pb-2 border-t border-slate-800 pt-2">
-              {['#EF4444', '#3B82F6', '#000000', '#10B981', '#F59E0B'].map(c => (
-                <button
-                  key={c}
-                  onClick={() => setPenColor(c)}
-                  className={`w-8 h-8 rounded-full shadow-lg transform transition ${penColor === c ? 'scale-125 border-2 border-white' : 'scale-100 border border-transparent'}`}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
+          {/* Actions */}
+          <div className="flex gap-2">
+            <button onClick={toggleFullscreen} className="p-3 text-slate-300 active:text-white bg-slate-800 rounded-lg"><i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'}`}></i></button>
+            <button onClick={undoAnnotation} className="p-3 text-slate-300 active:text-white"><i className="fas fa-undo text-lg"></i></button>
+            <div className="w-px h-8 bg-slate-700 mx-1 self-center"></div>
+            {/* Active Color Preview */}
+            <div className="relative group">
+              <button
+                className="w-10 h-10 rounded-full border-2 border-white shadow-sm flex items-center justify-center"
+                style={{ backgroundColor: penColor }}
+                onClick={() => {
+                  // Cycle colors
+                  const colors = ['#EF4444', '#3B82F6', '#000000', '#10B981'];
+                  const idx = colors.indexOf(penColor);
+                  setPenColor(colors[(idx + 1) % colors.length]);
+                }}
+              >
+              </button>
             </div>
-          )}
+          </div>
         </div>
 
+        {/* Expanded Colors (Visible if Pen/Highlighter Active) */}
+        {(toolMode === 'PEN' || toolMode === 'HIGHLIGHTER') && (
+          <div className="flex justify-center gap-4 mt-3 pb-2 border-t border-slate-800 pt-2">
+            {['#EF4444', '#3B82F6', '#000000', '#10B981', '#F59E0B'].map(c => (
+              <button
+                key={c}
+                onClick={() => setPenColor(c)}
+                className={`w-8 h-8 rounded-full shadow-lg transform transition ${penColor === c ? 'scale-125 border-2 border-white' : 'scale-100 border border-transparent'}`}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
+        )}
         {/* Success Modal */}
         {showSuccessModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
@@ -1174,7 +1173,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
             </div>
           </div>
         )}
-        );
+      </div>
+      );
 };
 
-        export default UserViewer;
+      export default UserViewer;
