@@ -441,20 +441,19 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
                                                 <i className="fas fa-file-word text-blue-500 mr-2"></i> Word İndir
                                             </button>
 
-                                            {/* Share Links (Desktop) */}
                                             <div className="border-t border-slate-100 my-1 pt-2">
                                                 <div className="px-4 py-2">
-                                                    <label className="block text-xs font-bold text-slate-500 mb-1">Herkese Açık Link (V2.2 Hash)</label>
+                                                    <label className="block text-xs font-bold text-slate-500 mb-1">Herkese Açık Link (V3.0 Path-Hash)</label>
                                                     <div className="flex gap-2">
                                                         <input
                                                             readOnly
-                                                            value={`${window.location.origin}/#share=flashcard&notebookId=${currentNotebook.id}`}
+                                                            value={`${window.location.origin}/#/flashcard/${currentNotebook.id}`}
                                                             className="flex-1 text-xs border border-slate-200 bg-slate-50 rounded p-2 text-slate-600 outline-none focus:border-blue-500 select-all"
                                                             onClick={(e) => e.currentTarget.select()}
                                                         />
                                                         <button
                                                             onClick={() => {
-                                                                const url = `${window.location.origin}/#share=flashcard&notebookId=${currentNotebook.id}`;
+                                                                const url = `${window.location.origin}/#/flashcard/${currentNotebook.id}`;
                                                                 navigator.clipboard.writeText(url);
                                                                 alert("Link Kopyalandı!");
                                                             }}
@@ -466,10 +465,10 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
                                                     </div>
                                                     <p className="text-[10px] text-slate-400 mt-1">Bu linki kopyalayıp paylaşın.</p>
                                                 </div>
-                                                <a href={`https://wa.me/?text=Kartlarımı incele: ${window.location.origin}/%23share=flashcard&notebookId=${currentNotebook.id}`} target="_blank" rel="noopener noreferrer" className="block w-full text-left px-4 py-2 hover:bg-green-50 rounded-lg text-slate-700 font-medium">
+                                                <a href={`https://wa.me/?text=Kartlarımı incele: ${window.location.origin}/%23/flashcard/${currentNotebook.id}`} target="_blank" rel="noopener noreferrer" className="block w-full text-left px-4 py-2 hover:bg-green-50 rounded-lg text-slate-700 font-medium">
                                                     <i className="fab fa-whatsapp text-green-500 mr-2"></i> WhatsApp
                                                 </a>
-                                                <a href={`https://twitter.com/intent/tweet?text=Kelime kartlarımı incele&url=${window.location.origin}/%23share=flashcard&notebookId=${currentNotebook.id}`} target="_blank" rel="noopener noreferrer" className="block w-full text-left px-4 py-2 hover:bg-blue-50 rounded-lg text-slate-700 font-medium">
+                                                <a href={`https://twitter.com/intent/tweet?text=Kelime kartlarımı incele&url=${window.location.origin}/%23/flashcard/${currentNotebook.id}`} target="_blank" rel="noopener noreferrer" className="block w-full text-left px-4 py-2 hover:bg-blue-50 rounded-lg text-slate-700 font-medium">
                                                     <i className="fab fa-twitter text-blue-400 mr-2"></i> X (Twitter)
                                                 </a>
                                             </div>

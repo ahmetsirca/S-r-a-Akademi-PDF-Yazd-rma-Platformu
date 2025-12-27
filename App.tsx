@@ -32,6 +32,10 @@ const App: React.FC = () => {
     const hash = window.location.hash;
     if (hash.includes('share=flashcard') && hash.includes('notebookId=')) return true;
 
+    // PATH-STYLE HASH ROUTE (User Request: "Different Address")
+    // Format: /#/flashcard/NOTEBOOK_ID
+    if (hash.match(/^#\/flashcard\/[\w-]+/)) return true;
+
     return false;
   });
 
@@ -47,6 +51,12 @@ const App: React.FC = () => {
 
     let id = extractId(fullUrl);
     if (!id) id = extractId(hash);
+
+    // Path-style extraction
+    if (!id) {
+      const pathMatch = hash.match(/^#\/flashcard\/([\w-]+)/);
+      if (pathMatch) id = pathMatch[1];
+    }
 
     return id;
   });
