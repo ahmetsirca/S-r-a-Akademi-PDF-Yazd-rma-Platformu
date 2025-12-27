@@ -3,6 +3,7 @@ import { VocabNotebook } from '../types';
 import { DBService } from '../services/db';
 import WordList from './WordList';
 import StoryMode from './StoryMode';
+import FlashcardMode from './FlashcardMode';
 import { jsPDF } from 'jspdf';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
 import { saveAs } from 'file-saver';
@@ -15,7 +16,7 @@ interface VocabularyNotebookProps {
 const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose }) => {
     const [notebooks, setNotebooks] = useState<VocabNotebook[]>([]);
     const [currentNotebook, setCurrentNotebook] = useState<VocabNotebook | null>(null);
-    const [viewMode, setViewMode] = useState<'WORDS' | 'STORY'>('WORDS');
+    const [viewMode, setViewMode] = useState<'WORDS' | 'STORY' | 'FLASHCARD'>('WORDS');
     const [loading, setLoading] = useState(true);
 
     // notebook title editing
@@ -176,7 +177,13 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
                                         onClick={() => setViewMode('STORY')}
                                         className={`px-4 py-2 rounded-md text-sm font-bold transition ${viewMode === 'STORY' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                                     >
-                                        <i className="fas fa-book-reader mr-2"></i> Hikaye Modu
+                                        <i className="fas fa-book-reader mr-2"></i> Hikaye
+                                    </button>
+                                    <button
+                                        onClick={() => setViewMode('FLASHCARD')}
+                                        className={`px-4 py-2 rounded-md text-sm font-bold transition ${viewMode === 'FLASHCARD' ? 'bg-white text-green-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                    >
+                                        <i className="fas fa-layer-group mr-2"></i> Kartlar
                                     </button>
                                 </div>
 
@@ -286,6 +293,8 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
 
                                 {viewMode === 'WORDS' ? (
                                     <WordList notebookId={currentNotebook.id} />
+                                ) : viewMode === 'FLASHCARD' ? (
+                                    <FlashcardMode notebookId={currentNotebook.id} />
                                 ) : (
                                     <StoryMode notebookId={currentNotebook.id} />
                                 )}

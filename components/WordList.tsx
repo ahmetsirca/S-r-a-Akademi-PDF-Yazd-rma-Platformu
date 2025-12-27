@@ -23,6 +23,25 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
         setLoading(false);
     };
 
+    // Auto-translate debounce
+    useEffect(() => {
+        const translate = async () => {
+            if (!newTerm || newTerm.length < 2) return;
+            try {
+                const response = await fetch(`https://api.mymemory.translated.net/get?q=${newTerm}&langpair=en|tr`);
+                const data = await response.json();
+                if (data.responseData.translatedText) {
+                    setNewDef(data.responseData.translatedText);
+                }
+            } catch (e) {
+                console.error("Translation fail", e);
+            }
+        };
+
+        const timer = setTimeout(translate, 1000);
+        return () => clearTimeout(timer);
+    }, [newTerm]);
+
     const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newTerm || !newDef) return;
