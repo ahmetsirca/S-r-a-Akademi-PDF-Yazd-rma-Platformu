@@ -1004,7 +1004,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       {/* Scrollable Content with Touch Events */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto bg-slate-500 relative flex flex-col items-center pt-20 pb-20 md:pt-8 md:pb-8 transition-all duration-300 overscroll-none touch-pan-x touch-pan-y"
+        className="flex-1 overflow-auto bg-slate-500 relative flex flex-col pt-20 pb-20 md:pt-8 md:pb-8 transition-all duration-300 overscroll-none touch-pan-x touch-pan-y"
         onWheel={handleWheel}
         onScroll={handleScroll}
         onClick={handleContentClick}
@@ -1012,7 +1012,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
-        <div ref={contentRef} className="flex flex-col items-center transition-transform duration-75 origin-top-left"> {/* Inner Wrapper for Transform */}
+        <div ref={contentRef} className="flex flex-col min-w-full items-stretch transition-transform duration-75 origin-top-left"> {/* Inner Wrapper for Transform */}
           {!isFocused && <div className="fixed inset-0 z-[100] bg-black/50 text-white flex items-center justify-center text-2xl font-bold">Odaklanın</div>}
 
           {pdfUrl ? (
@@ -1072,7 +1072,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
                     <div
                       key={pageNum}
                       id={`page-${pageNum}`}
-                      className={`relative w-full flex justify-center transition-all duration-300 mb-4 pdf-page-wrapper ${wrapperStyle}`}
+                      className={`relative w-fit mx-auto transition-all duration-300 mb-4 pdf-page-wrapper ${wrapperStyle}`}
                       style={{ minHeight: height }}
                     >
                       {isVisible ? (
