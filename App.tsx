@@ -15,22 +15,26 @@ const App: React.FC = () => {
   // --- GOOGLE-GRADE ROUTING FIX ---
   // Bifurcate the app logic immediately. If this is a public share, we DO NOT want to run any Auth logic.
   // We check the URL strictly and return early.
-  const [isPublicMode, setIsPublicMode] = useState(false);
-  const [publicNoteId, setPublicNoteId] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Run this ONCE on mount, synchronously-ish
+  // Navigation State
+  // Lazy init to check URL immediately - GOOGLE GRADE FIX
+  // We check the URL strictly during INITIAL STATE SETUP to return true immediately.
+  // This executes BEFORE the first render, preventing any flash of Login screen.
+  const [isPublicMode, setIsPublicMode] = useState(() => {
     const fullUrl = window.location.href;
-    if (fullUrl.includes('share=flashcard') && fullUrl.includes('notebookId=')) {
-      console.log("🚀 Public Mode Detected via Robust URL Check");
+    console.log("App Mounting - Checking URL for Public Share:", fullUrl);
+    return fullUrl.includes('share=flashcard') && fullUrl.includes('notebookId=');
+  });
+
+  const [publicNoteId, setPublicNoteId] = useState<string | null>(() => {
+    const fullUrl = window.location.href;
+    if (fullUrl.includes('share=flashcard')) {
       const match = fullUrl.match(/[?&]notebookId=([^&]+)/);
-      if (match && match[1]) {
-        setPublicNoteId(match[1]);
-        setIsPublicMode(true);
-        // Stop further execution of parent effects by state bifurcation
-      }
+      return match ? match[1] : null;
     }
-  }, []);
+    return null;
+  });
+
+  // No useEffect needed for detection anymore. It's already set.
 
   // --- EARLY RETURN FOR PUBLIC MODE ---
   // This prevents any Auth logic, Session checks, or DB calls from interfering.
