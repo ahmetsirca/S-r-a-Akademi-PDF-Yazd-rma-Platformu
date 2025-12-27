@@ -62,23 +62,76 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
         const words = await DBService.getNotebookWords(currentNotebook.id);
         const doc = new jsPDF();
 
-        // Set font to support Turkish characters if possible, standard font might have issues
-        // For simplicity, we use standard font but might miss some chars. Ideally import a Unicode font.
-        // doc.addFont(...) 
+        // Title
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(22);
+        doc.setTextColor(40, 40, 40);
+        doc.text(currentNotebook.title, 105, 20, { align: 'center' });
 
-        doc.setFontSize(18);
-        doc.text(currentNotebook.title, 10, 10);
+        // Subtitle / Date
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Oluşturulma: ${new Date().toLocaleDateString('tr-TR')}`, 105, 28, { align: 'center' });
 
-        doc.setFontSize(12);
-        let y = 30;
+        // Line separator
+        doc.setLineWidth(0.5);
+        doc.setDrawColor(200, 200, 200);
+        doc.line(20, 35, 190, 35);
+
+        let y = 50;
 
         words.forEach((w, i) => {
-            if (y > 280) { doc.addPage(); y = 20; }
-            doc.text(`${i + 1}. ${w.term} - ${w.definition}`, 10, y);
-            y += 10;
+            if (y > 270) {
+                doc.addPage();
+                y = 20;
+                // Header on new page
+                doc.setFontSize(10);
+                doc.setTextColor(150, 150, 150);
+                doc.text(currentNotebook.title, 105, 10, { align: 'center' });
+            }
+
+            // Number & Term
+            doc.setFontSize(12);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(0, 0, 0);
+            doc.text(`${i + 1}. ${w.term}`, 20, y);
+
+            // Definition (Wrapped)
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(50, 50, 50);
+            // split text to fit in width (approx 120 units)
+            const splitDef = doc.splitTextToSize(`: ${w.definition}`, 120);
+            doc.text(splitDef, 70, y);
+
+            // Increment Y based on lines
+            y += (splitDef.length * 6) + 4;
+
+            // Dotted separator
+            doc.setDrawColor(240, 240, 240);
+            doc.line(20, y - 2, 190, y - 2);
         });
 
         doc.save(`${currentNotebook.title}_Kelime_Defteri.pdf`);
+    };
+
+    const handleShare = async () => {
+        const shareData = {
+            title: 'Sırça Akademi Kelime Defterim',
+            text: `Sırça Akademi'de oluşturduğum "${currentNotebook?.title || 'Kelime'}" defterimi incele!`,
+            url: window.location.href
+        };
+
+        if (navigator.share) {
+            try {
+                await navigator.share(shareData);
+            } catch (err) {
+                console.error("Share failed", err);
+            }
+        } else {
+            // Fallback: Copy to clipboard or show alert
+            alert("Paylaşım özelliği bu tarayıcıda desteklenmiyor, ancak linki kopyalayabilirsiniz.");
+        }
     };
 
     const exportWord = async () => {
@@ -118,28 +171,40 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
 
     return (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-50 w-full max-w-6xl h-[85vh] rounded-3xl shadow-2xl flex overflow-hidden animate-scale-in">
+            <div className="bg-slate-50 w-full max-w-6xl h-[85vh] rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden animate-scale-in">
 
-                {/* Sidebar */}
-                <div className="w-64 bg-white border-r border-slate-200 flex flex-col">
-                    <div className="p-4 border-b border-slate-100 bg-slate-50">
-                        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 mb-4 flex items-center gap-2 text-sm font-bold">
-                            <i className="fas fa-arrow-left"></i> Geri Dön
+                {/* Sidebar - Mobile Responsive: Top bar on mobile, Sidebar on desktop */}
+                <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 flex flex-row md:flex-col justify-between md:justify-start shrink-0">
+                    <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between md:block">
+                        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 mb-0 md:mb-4 flex items-center gap-2 text-sm font-bold">
+                            <i className="fas fa-arrow-left"></i> <span className="hidden md:inline">Geri Dön</span>
                         </button>
-                        <h2 className="font-bold text-slate-800 text-lg">Kelime Defterim</h2>
+                        <h2 className="font-bold text-slate-800 text-lg">Kelime Defteri</h2>
                     </div>
 
-                    <div className="flex-1 overflow-auto p-2 space-y-1">
+                    <div className="hidden md:block flex-1 overflow-auto p-2 space-y-1">
                         <button
                             onClick={() => setCurrentNotebook(null)}
                             className={`w-full text-left p-3 rounded-lg font-bold flex items-center gap-3 transition ${!currentNotebook ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-50'}`}
                         >
                             <i className="fas fa-home"></i> Ana Sayfa
                         </button>
-                        {/* Note: We rely on the Drill-down view in the main content for Sub-notebooks instead of a full tree here to keep UI clean */}
                     </div>
 
-                    <div className="p-4 border-t border-slate-100">
+                    {/* Mobile Only: Simple Home Button */}
+                    <div className="md:hidden flex items-center p-2">
+                        <button
+                            onClick={() => setCurrentNotebook(null)}
+                            className={`p-2 rounded-lg font-bold flex items-center gap-2 ${!currentNotebook ? 'text-blue-600' : 'text-slate-600'}`}
+                        >
+                            <i className="fas fa-home text-xl"></i>
+                        </button>
+                        <button onClick={handleCreateNotebook} className="bg-indigo-600 text-white p-2 rounded-lg ml-2">
+                            <i className="fas fa-plus"></i>
+                        </button>
+                    </div>
+
+                    <div className="hidden md:block p-4 border-t border-slate-100">
                         <button onClick={handleCreateNotebook} className="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 transition">
                             <i className="fas fa-plus mr-2"></i> Yeni Defter
                         </button>
@@ -165,9 +230,9 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
                         </div>
 
                         {currentNotebook && (
-                            <div className="flex items-center gap-2">
-                                {/* View Toggles */}
-                                <div className="bg-slate-100 p-1 rounded-lg flex mr-4">
+                            <div className="flex flex-wrap items-center gap-2 justify-end">
+                                {/* View Toggles: Stack on very small screens or scroll */}
+                                <div className="bg-slate-100 p-1 rounded-lg flex overflow-x-auto max-w-[200px] md:max-w-none no-scrollbar">
                                     <button
                                         onClick={() => setViewMode('WORDS')}
                                         className={`px-4 py-2 rounded-md text-sm font-bold transition ${viewMode === 'WORDS' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
@@ -197,6 +262,15 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
                                         <i className="fas fa-download"></i>
                                     </button>
 
+                                    {/* Share Button (New) */}
+                                    <button
+                                        onClick={handleShare}
+                                        className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600 hover:bg-slate-200 transition ml-2"
+                                        title="Paylaş"
+                                    >
+                                        <i className="fas fa-share-alt"></i>
+                                    </button>
+
                                     {showExportMenu && (
                                         <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-50 p-2 animate-fade-in">
                                             <button
@@ -211,6 +285,16 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
                                             >
                                                 <i className="fas fa-file-word text-blue-500 mr-2"></i> Word İndir
                                             </button>
+
+                                            {/* Share Links (Desktop) */}
+                                            <div className="border-t border-slate-100 my-1 pt-1">
+                                                <a href={`https://wa.me/?text=Kelime defterimi incele: ${window.location.href}`} target="_blank" rel="noopener noreferrer" className="block w-full text-left px-4 py-2 hover:bg-green-50 rounded-lg text-slate-700 font-medium">
+                                                    <i className="fab fa-whatsapp text-green-500 mr-2"></i> WhatsApp
+                                                </a>
+                                                <a href={`https://twitter.com/intent/tweet?text=Kelime defterimi incele&url=${window.location.href}`} target="_blank" rel="noopener noreferrer" className="block w-full text-left px-4 py-2 hover:bg-blue-50 rounded-lg text-slate-700 font-medium">
+                                                    <i className="fab fa-twitter text-blue-400 mr-2"></i> X (Twitter)
+                                                </a>
+                                            </div>
 
                                             {/* Close Overlay for Mobile convenience */}
                                             <div className="fixed inset-0 z-[-1]" onClick={() => setShowExportMenu(false)}></div>
