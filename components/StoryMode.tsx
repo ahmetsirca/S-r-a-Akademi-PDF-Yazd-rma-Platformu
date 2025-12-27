@@ -78,11 +78,11 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                 setEditingId(null);
                 loadData();
             } else {
-                alert("Kayıt sırasında bir hata oluştu. Lütfen tekrar deneyin.");
+                alert("Kayıt işlemi başarısız. Veritabanı izniniz eksik olabilir.\n\nLütfen 'SQL Editor' üzerinden 'vocab_stories' tablosu için RLS ayarını kapatın.");
             }
         } catch (e) {
             console.error("Save Story Error:", e);
-            alert("Kayıt işlemi başarısız: " + e);
+            alert("Kayıt sırasında teknik bir hata oluştu: " + e);
         }
     };
 
