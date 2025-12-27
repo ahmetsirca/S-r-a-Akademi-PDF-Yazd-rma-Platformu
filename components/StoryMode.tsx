@@ -476,7 +476,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                                 // READ MODE
                                 <>
                                     <h2 className="text-3xl font-bold text-slate-800 mb-8 text-center font-serif tracking-wide border-b border-slate-100 pb-4">{title || 'Başlıksız Hikaye'}</h2>
-                                    <div className="text-xl leading-loose text-slate-800 font-serif break-words">
+                                    <div className="text-xl leading-loose text-slate-800 font-serif break-words text-justify">
                                         {renderInteractiveContent(content)}
                                     </div>
                                 </>
