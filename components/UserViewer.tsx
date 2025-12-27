@@ -1058,7 +1058,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
                     <div
                       key={pageNum}
                       id={`page-${pageNum}`}
-                      className={`relative w-fit mx-auto transition-all duration-300 mb-4 pdf-page-wrapper ${wrapperStyle}`}
+                      className={`relative w-fit mx-auto transition-all duration-300 mb-1 pdf-page-wrapper ${wrapperStyle}`}
                       style={{ minHeight: visualHeight }}
                     >
                       {isVisible ? (
