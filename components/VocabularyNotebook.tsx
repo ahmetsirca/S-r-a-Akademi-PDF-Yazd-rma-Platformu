@@ -19,6 +19,7 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
     const [viewMode, setViewMode] = useState<'WORDS' | 'STORY' | 'FLASHCARD'>('WORDS');
     const [loading, setLoading] = useState(true);
     const [showExportMenu, setShowExportMenu] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
 
     // notebook title editing
     const [editingNotebookId, setEditingNotebookId] = useState<string | null>(null);
@@ -170,15 +171,24 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
     );
 
     return (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-50 w-full max-w-6xl h-[85vh] rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden animate-scale-in">
+        <div className={`fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center ${isFullscreen ? 'p-0' : 'p-4'}`}>
+            <div className={`bg-slate-50 w-full ${isFullscreen ? 'h-full rounded-none' : 'max-w-6xl h-[85vh] rounded-3xl'} shadow-2xl flex flex-col md:flex-row overflow-hidden transition-all duration-300 animate-scale-in`}>
 
                 {/* Sidebar - Mobile Responsive: Top bar on mobile, Sidebar on desktop */}
                 <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 flex flex-row md:flex-col justify-between md:justify-start shrink-0">
                     <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between md:block">
-                        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 mb-0 md:mb-4 flex items-center gap-2 text-sm font-bold">
-                            <i className="fas fa-arrow-left"></i> <span className="hidden md:inline">Geri Dön</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 mb-0 md:mb-4 flex items-center gap-2 text-sm font-bold">
+                                <i className="fas fa-arrow-left"></i> <span className="hidden md:inline">Geri Dön</span>
+                            </button>
+                            {/* Mobile Fullscreen Toggle */}
+                            <button
+                                onClick={() => setIsFullscreen(!isFullscreen)}
+                                className="md:hidden text-slate-400 hover:text-blue-600"
+                            >
+                                <i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'}`}></i>
+                            </button>
+                        </div>
                         <h2 className="font-bold text-slate-800 text-lg">Kelime Defteri</h2>
                     </div>
 
@@ -228,6 +238,15 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
                                 <h1 className="text-2xl font-bold text-slate-800">Defterlerim</h1>
                             )}
                         </div>
+
+                        {/* Desktop Fullscreen Toggle */}
+                        <button
+                            onClick={() => setIsFullscreen(!isFullscreen)}
+                            className="hidden md:flex w-8 h-8 items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition mr-2"
+                            title={isFullscreen ? "Tam Ekrandan Çık" : "Tam Ekran Yap"}
+                        >
+                            <i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'}`}></i>
+                        </button>
 
                         {currentNotebook && (
                             <div className="flex flex-wrap items-center gap-2 justify-end">
