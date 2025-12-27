@@ -573,6 +573,36 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     // 2. Update Page Tracking (Throttled via RequestAnimationFrame)
     if (rAFRef.current === null) { // Only schedule if not already scheduled
       rAFRef.current = requestAnimationFrame(() => {
+
+        // --- SCROLL TRAP (Zoom Lock) ---
+        // If zoomed in, prevent scrolling to other pages
+        if (scale > 1.05 && containerRef.current) {
+          const pageEl = document.getElementById(`page-${currentPage}`);
+          if (pageEl) {
+            const top = pageEl.offsetTop;
+            const bottom = top + pageEl.clientHeight;
+            const viewHeight = containerRef.current.clientHeight;
+
+            // Clamp Top
+            if (currentScrollY < top) {
+              containerRef.current.scrollTop = top;
+            }
+            // Clamp Bottom
+            else if (currentScrollY > bottom - viewHeight && pageEl.clientHeight > viewHeight) {
+              // If page is taller than view, clamp to bottom edge
+              containerRef.current.scrollTop = bottom - viewHeight;
+            }
+            // If page is shorter than view, center it? or just clamp top
+            else if (pageEl.clientHeight <= viewHeight) {
+              // Keep it generally in view or let it align top
+              if (currentScrollY > top) containerRef.current.scrollTop = top;
+            }
+          }
+          // Do NOT update page tracking if locked (we are locked to this page anyway)
+          rAFRef.current = null;
+          return;
+        }
+
         updateCurrentPage();
         rAFRef.current = null; // Reset the ref after execution
       });
@@ -994,8 +1024,29 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
                   const isVisible = Math.abs(pageNum - currentPage) <= 10;
                   const height = pageHeights[pageNum] || estimatedHeight;
 
+                  // Zoom Isolation Style
+                  // If zoomed, hide others or dim them.
+                  const isZoomed = scale > 1.05;
+                  const isCurrent = pageNum === currentPage;
+
+                  // If zoomed and NOT current, hide to prevent distraction (and improve performance)
+                  // But keep layout space using 'invisible' or just allow them to be there but dimmed?
+                  // User said: "Çerçeve alsın" -> Frame it. "Başka sayfalara atlamasın" -> Trap.
+                  // If we use the Scroll Trap above, we don't strictly need to hide them, but visual focus helps.
+
+                  const wrapperStyle = isZoomed
+                    ? (isCurrent
+                      ? "opacity-100 ring-4 ring-blue-500/50 shadow-[0_0_100px_rgba(0,0,0,0.5)] z-10" // Focused
+                      : "opacity-10 blur-sm grayscale pointer-events-none") // Background
+                    : "opacity-100";
+
                   return (
-                    <div key={`page-wrapper-${pageNum}`} id={`page-${pageNum}`} className="mb-4 transition-all duration-300" style={{ minHeight: height, width: renderedWidth }}>
+                    <div
+                      key={pageNum}
+                      id={`page-${pageNum}`}
+                      className={`relative w-full flex justify-center transition-all duration-300 mb-4 pdf-page-wrapper ${wrapperStyle}`}
+                      style={{ minHeight: height }}
+                    >
                       {isVisible ? (
                         <SinglePDFPage
                           pageNumber={pageNum}
