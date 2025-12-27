@@ -18,6 +18,7 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
     const [currentNotebook, setCurrentNotebook] = useState<VocabNotebook | null>(null);
     const [viewMode, setViewMode] = useState<'WORDS' | 'STORY' | 'FLASHCARD'>('WORDS');
     const [loading, setLoading] = useState(true);
+    const [showExportMenu, setShowExportMenu] = useState(false);
 
     // notebook title editing
     const [editingNotebookId, setEditingNotebookId] = useState<string | null>(null);
@@ -188,18 +189,33 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
                                 </div>
 
                                 {/* Exports */}
-                                <div className="dropdown relative group">
-                                    <button className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600 hover:bg-slate-200">
+                                <div className="dropdown relative">
+                                    <button
+                                        onClick={() => setShowExportMenu(!showExportMenu)}
+                                        className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600 hover:bg-slate-200 transition"
+                                    >
                                         <i className="fas fa-download"></i>
                                     </button>
-                                    <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 hidden group-hover:block z-50 p-2">
-                                        <button onClick={exportPDF} className="w-full text-left px-4 py-2 hover:bg-slate-50 rounded-lg text-slate-700 font-medium">
-                                            <i className="fas fa-file-pdf text-red-500 mr-2"></i> PDF İndir
-                                        </button>
-                                        <button onClick={exportWord} className="w-full text-left px-4 py-2 hover:bg-slate-50 rounded-lg text-slate-700 font-medium">
-                                            <i className="fas fa-file-word text-blue-500 mr-2"></i> Word İndir
-                                        </button>
-                                    </div>
+
+                                    {showExportMenu && (
+                                        <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-50 p-2 animate-fade-in">
+                                            <button
+                                                onClick={() => { exportPDF(); setShowExportMenu(false); }}
+                                                className="w-full text-left px-4 py-2 hover:bg-slate-50 rounded-lg text-slate-700 font-medium"
+                                            >
+                                                <i className="fas fa-file-pdf text-red-500 mr-2"></i> PDF İndir
+                                            </button>
+                                            <button
+                                                onClick={() => { exportWord(); setShowExportMenu(false); }}
+                                                className="w-full text-left px-4 py-2 hover:bg-slate-50 rounded-lg text-slate-700 font-medium"
+                                            >
+                                                <i className="fas fa-file-word text-blue-500 mr-2"></i> Word İndir
+                                            </button>
+
+                                            {/* Close Overlay for Mobile convenience */}
+                                            <div className="fixed inset-0 z-[-1]" onClick={() => setShowExportMenu(false)}></div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
