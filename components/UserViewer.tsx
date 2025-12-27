@@ -332,8 +332,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
       setSearchResults(results);
       if (results.length > 0) {
-        setCurrentPage(results[0]);
-        // Auto scroll handling is in useEffect for currentPage
+        jumpToPage(results[0]);
       } else {
         alert("Sonuç bulunamadı.");
       }
@@ -348,28 +347,44 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     if (searchResults.length === 0) return;
     const newIndex = (currentSearchIndex + 1) % searchResults.length;
     setCurrentSearchIndex(newIndex);
-    setCurrentPage(searchResults[newIndex]);
+    jumpToPage(searchResults[newIndex]);
   };
 
   const prevResult = () => {
     if (searchResults.length === 0) return;
     const newIndex = (currentSearchIndex - 1 + searchResults.length) % searchResults.length;
     setCurrentSearchIndex(newIndex);
-    setCurrentPage(searchResults[newIndex]);
+    jumpToPage(searchResults[newIndex]);
   };
 
   // Variable alias for UI
   const query = searchQuery;
 
-  // --- JUMP LOGIC ---
+  // --- SCROLL / JUMP LOGIC ---
+  const jumpToPage = (pageNum: number) => {
+    // 1. Update state to ensure virtualization renders the content
+    setCurrentPage(pageNum);
+
+    // 2. Perform Scroll
+    // Use timeout to allow React to update the virtualization window if needed
+    // Although the "wrapper" is always there, fast scrolling needs the browser to catch up
+    setTimeout(() => {
+      const el = document.getElementById(`page-${pageNum}`);
+      if (el) {
+        // block: 'start' aligns it to top. 
+        // We use check visibility or just force it.
+        el.scrollIntoView({ behavior: 'auto', block: 'start' });
+      }
+    }, 50);
+  };
+
   const handleJumpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const p = parseInt(jumpTarget);
     if (!isNaN(p) && p >= 1 && p <= (numPages || 1)) {
-      setCurrentPage(p);
       setIsJumpOpen(false);
       setJumpTarget("");
-      // Scroll happens via existing useEffect
+      jumpToPage(p);
     } else {
       alert("Geçersiz sayfa numarası.");
     }
@@ -563,11 +578,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     if (saved) {
       const p = parseInt(saved);
       if (p > 1 && p <= numPages) {
-        // Delay scroll to allow render
-        setTimeout(() => {
-          const el = document.getElementById(`page-${p}`);
-          if (el) el.scrollIntoView();
-        }, 800);
+        // Delay needed for initial render cycle
+        setTimeout(() => jumpToPage(p), 500);
       }
     }
   };
