@@ -294,7 +294,54 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
                         </button>
                     </div>
 
-                    <div className="hidden md:block p-4 border-t border-slate-100">
+                    <div className="hidden md:block p-4 border-t border-slate-100 space-y-2">
+                        <button onClick={async () => {
+                            if (!confirm("Eski kelimeleriniz 'Genel (Eski)' defterine yüklenecek. Onaylıyor musunuz?")) return;
+
+                            setLoading(true);
+                            try {
+                                let targetNb = notebooks.find(n => n.title === 'Genel (Eski)');
+                                if (!targetNb) {
+                                    const newNb = await DBService.createNotebook(userId, 'Genel (Eski)');
+                                    targetNb = newNb || undefined; // Fix: handling null by converting to undefined if needed or ensuring type match
+                                }
+
+                                if (targetNb) {
+                                    console.log("Starting Manual Restore...");
+                                    let count = 0;
+
+                                    // 1. Try DB
+                                    const oldVocab = await DBService.getVocab(userId);
+                                    if (oldVocab && oldVocab.length > 0) {
+                                        for (const w of oldVocab) {
+                                            await DBService.addNotebookWord(targetNb.id, w.wordEn, w.wordTr);
+                                            count++;
+                                        }
+                                    }
+
+                                    // 2. Try Backup List (Always run this for safety in manual mode to ensure specific words exist)
+                                    // We should maybe check duplicates? For now just add, user can delete.
+                                    // actually getNotebookWords to check duplicates is better but let's just add to ensure presence.
+                                    for (const w of BACKUP_VOCAB_LIST) {
+                                        await DBService.addNotebookWord(targetNb.id, w.term, w.definition);
+                                        count++;
+                                    }
+
+                                    alert(`İşlem Tamamlandı! ${count} kelime kontrol edildi ve yüklendi.`);
+                                    loadNotebooks();
+                                } else {
+                                    alert("Defter oluşturulamadı. Lütfen sayfayı yenileyip tekrar deneyin.");
+                                }
+                            } catch (e) {
+                                console.error(e);
+                                alert("Bir hata oluştu.");
+                            } finally {
+                                setLoading(false);
+                            }
+                        }} className="w-full bg-emerald-600 text-white py-2 rounded-lg font-bold hover:bg-emerald-700 transition">
+                            <i className="fas fa-sync-alt mr-2"></i> Verileri Kurtar
+                        </button>
+
                         <button onClick={handleCreateNotebook} className="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 transition">
                             <i className="fas fa-plus mr-2"></i> Yeni Defter
                         </button>
