@@ -61,9 +61,27 @@ const FlashcardMode: React.FC<FlashcardModeProps> = ({ notebookId }) => {
                             {isFlipped ? 'TÜRKÇE' : 'İNGİLİZCE'}
                         </span>
 
-                        <p className={`text-5xl font-black break-words max-w-full ${isFlipped ? 'text-green-600' : 'text-slate-800'}`}>
-                            {isFlipped ? currentWord.definition : currentWord.term}
-                        </p>
+                        <div className="flex items-center gap-3">
+                            <p className={`text-5xl font-black break-words max-w-full ${isFlipped ? 'text-green-600' : 'text-slate-800'}`}>
+                                {isFlipped ? currentWord.definition : currentWord.term}
+                            </p>
+                            {!isFlipped && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if ('speechSynthesis' in window) {
+                                            const u = new SpeechSynthesisUtterance(currentWord.term);
+                                            u.lang = 'en-US';
+                                            window.speechSynthesis.speak(u);
+                                        }
+                                    }}
+                                    className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white flex items-center justify-center transition shadow-sm flex-shrink-0"
+                                    title="Dinle"
+                                >
+                                    <i className="fas fa-volume-up text-xl"></i>
+                                </button>
+                            )}
+                        </div>
 
                         <p className="absolute bottom-8 text-xs text-slate-300 font-medium group-hover:text-indigo-400 transition animate-pulse">
                             <i className="fas fa-sync-alt mr-1"></i> Çevirmek için tıkla
