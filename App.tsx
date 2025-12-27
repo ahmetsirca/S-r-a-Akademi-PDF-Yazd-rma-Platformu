@@ -17,24 +17,15 @@ const App: React.FC = () => {
   // We check the URL strictly and return early.
   // Navigation State
   // Lazy init to check URL immediately - GOOGLE GRADE FIX
-  // We check the URL strictly during INITIAL STATE SETUP to return true immediately.
-  // This executes BEFORE the first render, preventing any flash of Login screen.
-  // HYBRID STRATEGY: Check both Search (?) and Hash (#) for robustness
+  // NUCLEAR OPTION: If 'flashcard' exists at all, trigger.
   const [isPublicMode, setIsPublicMode] = useState(() => {
     const fullUrl = window.location.href;
-    console.log("App Mounting - Checking URL for Public Share:", fullUrl);
-
-    // Check Query Params
-    if (fullUrl.includes('share=flashcard') && fullUrl.includes('notebookId=')) return true;
-
-    // Check Hash Query (e.g. /#share=flashcard&notebookId=...)
-    // Some routers or servers move params to hash, or we might use hash links explicitly.
     const hash = window.location.hash;
-    if (hash.includes('share=flashcard') && hash.includes('notebookId=')) return true;
 
-    // PATH-STYLE HASH ROUTE (User Request: "Different Address")
-    // Format: /#/flashcard/NOTEBOOK_ID
-    if (hash.match(/^#\/flashcard\/[\w-]+/)) return true;
+    console.log("NUCLEAR CHECK:", fullUrl, hash);
+
+    if (fullUrl.includes('flashcard')) return true;
+    if (hash.includes('flashcard')) return true;
 
     return false;
   });
@@ -43,29 +34,40 @@ const App: React.FC = () => {
     const fullUrl = window.location.href;
     const hash = window.location.hash;
 
-    // Helper to extract id
-    const extractId = (str: string) => {
-      const match = str.match(/[?&#]notebookId=([^&]+)/);
-      return match ? match[1] : null;
-    };
+    // 1. Try Path-Style Hash /#/flashcard/ID
+    const pathMatch = hash.match(/\/flashcard\/([\w-]+)/); // Flexible regex
+    if (pathMatch && pathMatch[1]) return pathMatch[1];
 
-    let id = extractId(fullUrl);
-    if (!id) id = extractId(hash);
+    // 2. Try Standard Param notebookId=ID
+    const paramMatch = fullUrl.match(/notebookId=([\w-]+)/);
+    if (paramMatch && paramMatch[1]) return paramMatch[1];
 
-    // Path-style extraction
-    if (!id) {
-      const pathMatch = hash.match(/^#\/flashcard\/([\w-]+)/);
-      if (pathMatch) id = pathMatch[1];
-    }
+    const hashParamMatch = hash.match(/notebookId=([\w-]+)/);
+    if (hashParamMatch && hashParamMatch[1]) return hashParamMatch[1];
 
-    return id;
+    return null;
   });
 
   // No useEffect needed for detection anymore. It's already set.
 
   // --- EARLY RETURN FOR PUBLIC MODE ---
   // This prevents any Auth logic, Session checks, or DB calls from interfering.
-  if (isPublicMode && publicNoteId) {
+  if (isPublicMode) {
+    if (!publicNoteId) {
+      // Found flashcard keyword but no ID? Show Error instead of Login
+      return (
+        <div className="flex items-center justify-center h-screen bg-red-50 flex-col p-4">
+          <h1 className="text-2xl font-bold text-red-600 mb-2">HATA: Flashcard ID Bulunamadı</h1>
+          <p className="text-slate-600 mb-4">Link bozuk veya eksik görünüyor.</p>
+          <div className="bg-white p-4 rounded border text-xs text-left font-mono">
+            <p><b>URL:</b> {window.location.href}</p>
+            <p><b>Hash:</b> {window.location.hash}</p>
+          </div>
+          <button onClick={() => window.location.reload()} className="mt-6 bg-blue-600 text-white px-6 py-2 rounded">Sayfayı Yenile</button>
+        </div>
+      );
+    }
+
     return (
       <div className="fixed inset-0 bg-slate-50 z-50 flex flex-col">
         <div className="bg-white p-4 shadow-sm flex justify-between items-center px-8">
