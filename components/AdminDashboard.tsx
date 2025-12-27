@@ -2,26 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { StorageService } from '../services/storage';
 import { PDFBook, AccessKey, Collection } from '../types';
 
-import { QuestionParser, ParsedQuestion } from '../utils/QuestionParser';
-import { QuizService } from '../services/db';
-
-// Static imports to restore functionality
-import * as pdfjsLib from 'pdfjs-dist';
-import * as mammoth from 'mammoth';
-
-
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  // Tabs: 'KEYS' = Legacy Key Management, 'COURSES' = New Folder/Course Management, 'USERS' = User Management, 'LOGS' = Activity Logs, 'QUIZ' = Quiz Upload
-  const [adminTab, setAdminTab] = useState<'KEYS' | 'COURSES' | 'USERS' | 'LOGS' | 'QUIZ'>('KEYS');
-
-  // -- QUIZ STATE --
-  const [quizFile, setQuizFile] = useState<File | null>(null);
-  const [parsedQuestions, setParsedQuestions] = useState<ParsedQuestion[]>([]);
-  const [isParsing, setIsParsing] = useState(false);
+  // Tabs: 'KEYS' = Legacy Key Management, 'COURSES' = New Folder/Course Management, 'USERS' = User Management, 'LOGS' = Activity Logs
+  const [adminTab, setAdminTab] = useState<'KEYS' | 'COURSES' | 'USERS' | 'LOGS'>('KEYS');
 
   // -- EXISTING STATE (Keys) --
   const [collections, setCollections] = useState<Collection[]>([]);

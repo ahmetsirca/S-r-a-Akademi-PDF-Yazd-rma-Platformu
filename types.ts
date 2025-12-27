@@ -82,16 +82,7 @@ export interface ActivityLog {
   createdAt: string;
 }
 
-export interface QuizQuestion {
-  id: string;
-  question_text: string;
-  options: string[]; // 5 options
-  correct_answer: string; // "A" | "B" | "C" | "D" | "E"
-  explanation: string;
-  created_at: string;
-}
-
-export type ViewState = 'landing' | 'library' | 'notebook' | 'flashcards' | 'story' | 'settings' | 'admin' | 'quiz';
+export type ViewState = 'landing' | 'library' | 'notebook' | 'flashcards' | 'story' | 'settings' | 'admin';
 
 export interface UserVocab {
   id: string;

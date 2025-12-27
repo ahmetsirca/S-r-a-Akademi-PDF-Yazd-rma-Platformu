@@ -1,48 +1,5 @@
 import { supabase } from './supabase';
-import { UserProfile, UserPermission, ActivityLog, QuizQuestion } from '../types';
-
-export const QuizService = {
-  async getQuestions() {
-    const { data, error } = await supabase
-      .from('quiz_questions')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching quiz questions:', error);
-      return [];
-    }
-    return data as QuizQuestion[];
-  },
-
-  async createQuestion(question: Omit<QuizQuestion, 'id' | 'created_at'>) {
-    const { data, error } = await supabase
-      .from('quiz_questions')
-      .insert(question)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error creating quiz question:', error);
-      throw error;
-    }
-    return data as QuizQuestion;
-  },
-
-  // Bulk create for importing 100 questions
-  async createQuestionsBulk(questions: Omit<QuizQuestion, 'id' | 'created_at'>[]) {
-    const { data, error } = await supabase
-      .from('quiz_questions')
-      .insert(questions)
-      .select();
-
-    if (error) {
-      console.error('Error bulk creating quiz questions:', error);
-      throw error;
-    }
-    return data as QuizQuestion[];
-  }
-};
+import { UserProfile, UserPermission, ActivityLog } from '../types';
 
 export const DBService = {
   // --- USERS ---
