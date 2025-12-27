@@ -248,6 +248,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   const [pageHeights, setPageHeights] = useState<Record<number, number>>({});
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null); // NEW: For CSS Transform
   const [containerWidth, setContainerWidth] = useState<number>(window.innerWidth);
 
   // --- SEARCH STATE ---
@@ -261,9 +262,10 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   const [isJumpOpen, setIsJumpOpen] = useState(false);
   const [jumpTarget, setJumpTarget] = useState("");
 
-  // --- PINCH ZOOM STATE ---
+  // --- PINCH ZOOM STATE (Advanced Focal Point) ---
   const touchStartDist = useRef<number | null>(null);
   const touchStartScale = useRef<number>(1);
+  const touchFocalPoint = useRef<{ x: number, y: number, scrollX: number, scrollY: number } | null>(null);
 
   // Helper: Distance between two touches
   const getTouchDist = (e: React.TouchEvent) => {
@@ -273,30 +275,123 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     return Math.sqrt(dx * dx + dy * dy);
   };
 
+  const getTouchCenter = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) return null;
+    return {
+      x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+      y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+    };
+  };
+
   const onTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
+    if (e.touches.length === 2 && containerRef.current) {
       const dist = getTouchDist(e);
-      if (dist) {
+      const center = getTouchCenter(e);
+
+      if (dist && center) {
         touchStartDist.current = dist;
         touchStartScale.current = scale;
+        // Capture center relative to the container VIEWPORT (not content)
+        // actually for transform origin we need it relative to content usually, or rely on translate.
+        // Simplified approach: Use CSS Matrix or Transform Origin on the fly.
+
+        // Let's store the raw client coordinates and scroll pos
+        touchFocalPoint.current = {
+          x: center.x,
+          y: center.y,
+          scrollX: containerRef.current.scrollLeft, // Usually 0 for flexcol, but good to have
+          scrollY: containerRef.current.scrollTop
+        };
+
+        // Disable transitions during pinch for 0 latency
+        if (contentRef.current) {
+          contentRef.current.style.transition = 'none';
+        }
       }
     }
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length === 2 && touchStartDist.current) {
+    if (e.touches.length === 2 && touchStartDist.current && touchFocalPoint.current && contentRef.current && containerRef.current) {
+      e.preventDefault(); // Prevent native browser scaling
       const dist = getTouchDist(e);
       if (dist) {
-        const scaleFactor = dist / touchStartDist.current;
-        const newScale = Math.min(Math.max(0.5, touchStartScale.current * scaleFactor), 3.0);
-        setScale(newScale);
-        e.preventDefault(); // Prevent native browser zoom
+        const ratio = dist / touchStartDist.current;
+        const newTempScale = Math.min(Math.max(0.5, touchStartScale.current * ratio), 3.0);
+        const actualRatio = newTempScale / touchStartScale.current;
+
+        // Visual Feedback via CSS only (Performant)
+        // We want to scale around the focal point.
+        // focal point in screen pixels: touchFocalPoint.current.x, y
+        // container bounding rect
+        const rect = containerRef.current.getBoundingClientRect();
+
+        // focal relative to container
+        const fx = touchFocalPoint.current.x - rect.left;
+        const fy = touchFocalPoint.current.y - rect.top;
+
+        // focal relative to content (which is scrolled)
+        const contentFx = fx + touchFocalPoint.current.scrollX;
+        const contentFy = fy + touchFocalPoint.current.scrollY;
+
+        // Apply Transform
+        // 1. Translate so focal point is at origin: translate(-contentFx, -contentFy)
+        // 2. Scale
+        // 3. Translate back: translate(contentFx, contentFy)
+        // But we are moving the DIV. The div is normally at (0,0) offset by scroll.
+        // Since we are NOT changing scroll yet, the div is visually at -scrollTop.
+
+        // Simpler: transform-origin at contentFx, contentFy
+        contentRef.current.style.transformOrigin = `${contentFx}px ${contentFy}px`;
+        contentRef.current.style.transform = `scale(${actualRatio})`;
       }
     }
   };
 
   const onTouchEnd = () => {
-    touchStartDist.current = null;
+    if (touchStartDist.current && touchFocalPoint.current && contentRef.current && containerRef.current) {
+      // Commit the change
+      const currentTransform = contentRef.current.style.transform;
+      const match = currentTransform.match(/scale\((.+)\)/);
+      const cssRatio = match ? parseFloat(match[1]) : 1;
+
+      const oldScale = touchStartScale.current;
+      const newScale = Math.min(Math.max(0.5, oldScale * cssRatio), 3.0);
+
+      // Valid Ratio applied
+      const ratio = newScale / oldScale;
+
+      // Reset CSS
+      contentRef.current.style.transition = '';
+      contentRef.current.style.transform = '';
+      contentRef.current.style.transformOrigin = '';
+
+      // Update State
+      if (newScale !== oldScale) {
+        setScale(newScale);
+
+        // ADJUST SCROLL to keep partial stability
+        // Formula: newScroll = (oldScroll + focal) * ratio - focal
+
+        const rect = containerRef.current.getBoundingClientRect();
+        const fx = touchFocalPoint.current.x - rect.left;
+        const fy = touchFocalPoint.current.y - rect.top;
+
+        const oldScrollTop = touchFocalPoint.current.scrollY;
+        const oldScrollLeft = touchFocalPoint.current.scrollX;
+
+        // New scroll positions
+        const newScrollTop = (oldScrollTop + fy) * ratio - fy;
+        const newScrollLeft = (oldScrollLeft + fx) * ratio - fx;
+
+        // Apply Scroll immediately
+        containerRef.current.scrollTop = newScrollTop;
+        containerRef.current.scrollLeft = newScrollLeft;
+      }
+
+      touchStartDist.current = null;
+      touchFocalPoint.current = null;
+    }
   };
 
   // --- SEARCH LOGIC ---
@@ -859,70 +954,72 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
-        {!isFocused && <div className="fixed inset-0 z-[100] bg-black/50 text-white flex items-center justify-center text-2xl font-bold">Odaklanın</div>}
+        <div ref={contentRef} className="flex flex-col items-center transition-transform duration-75 origin-top-left"> {/* Inner Wrapper for Transform */}
+          {!isFocused && <div className="fixed inset-0 z-[100] bg-black/50 text-white flex items-center justify-center text-2xl font-bold">Odaklanın</div>}
 
-        {pdfUrl ? (
-          // Error Fallback: If React-PDF fails, show native Iframe
-          loadError ? (
-            <div className="w-full h-full flex flex-col items-center justify-center p-4">
-              <div className="bg-red-500/10 text-red-400 p-4 rounded-lg mb-4 text-center">
-                <p className="font-bold">Gelişmiş görüntüleyici açılamadı.</p>
-                <p className="text-sm">Standart görüntüleyiciye geçiliyor...</p>
+          {pdfUrl ? (
+            // Error Fallback: If React-PDF fails, show native Iframe
+            loadError ? (
+              <div className="w-full h-full flex flex-col items-center justify-center p-4">
+                <div className="bg-red-500/10 text-red-400 p-4 rounded-lg mb-4 text-center">
+                  <p className="font-bold">Gelişmiş görüntüleyici açılamadı.</p>
+                  <p className="text-sm">Standart görüntüleyiciye geçiliyor...</p>
+                </div>
+                <iframe
+                  src={pdfUrl}
+                  className="w-full h-[80vh] bg-white rounded-lg shadow-xl"
+                  title="PDF Viewer"
+                />
               </div>
-              <iframe
-                src={pdfUrl}
-                className="w-full h-[80vh] bg-white rounded-lg shadow-xl"
-                title="PDF Viewer"
-              />
-            </div>
-          ) : (
-            <Document
-              key={pdfDocument ? 'loaded' : pdfUrl} // Simple key
-              file={pdfUrl}
-              options={options}
-              onLoadSuccess={(pdf) => {
-                setPdfDocument(pdf); // Save doc ref for search
-                onDocumentLoadSuccess({ numPages: pdf.numPages });
-              }}
-              onLoadError={(err) => {
-                console.error("PDF Load Error:", err);
-                // Switch to generic iframe fallback instead of just alerting
-                setLoadError(true);
-              }}
-              loading={<div className="text-white text-center mt-20"><i className="fas fa-spinner fa-spin text-4xl mb-4"></i><p>Dosya Hazırlanıyor...</p></div>}
-              error={null} // Handle error manually via state
-            >
-              {numPages && Array.from(new Array(numPages)).map((_, index) => {
-                const pageNum = index + 1;
-                // Virtualization: Window size 10 to ensure pages are always ready
-                const isVisible = Math.abs(pageNum - currentPage) <= 10;
-                const height = pageHeights[pageNum] || estimatedHeight;
+            ) : (
+              <Document
+                key={pdfDocument ? 'loaded' : pdfUrl} // Simple key
+                file={pdfUrl}
+                options={options}
+                onLoadSuccess={(pdf) => {
+                  setPdfDocument(pdf); // Save doc ref for search
+                  onDocumentLoadSuccess({ numPages: pdf.numPages });
+                }}
+                onLoadError={(err) => {
+                  console.error("PDF Load Error:", err);
+                  // Switch to generic iframe fallback instead of just alerting
+                  setLoadError(true);
+                }}
+                loading={<div className="text-white text-center mt-20"><i className="fas fa-spinner fa-spin text-4xl mb-4"></i><p>Dosya Hazırlanıyor...</p></div>}
+                error={null} // Handle error manually via state
+              >
+                {numPages && Array.from(new Array(numPages)).map((_, index) => {
+                  const pageNum = index + 1;
+                  // Virtualization: Window size 10 to ensure pages are always ready
+                  const isVisible = Math.abs(pageNum - currentPage) <= 10;
+                  const height = pageHeights[pageNum] || estimatedHeight;
 
-                return (
-                  <div key={`page-wrapper-${pageNum}`} id={`page-${pageNum}`} className="mb-4 transition-all duration-300" style={{ minHeight: height, width: renderedWidth }}>
-                    {isVisible ? (
-                      <SinglePDFPage
-                        pageNumber={pageNum}
-                        scale={scale}
-                        width={renderedWidth}
-                        toolMode={toolMode}
-                        penColor={penColor}
-                        annotations={annotations[pageNum] || []}
-                        onAnnotationAdd={addAnnotation}
-                        onPageLoad={handlePageLoad}
-                        devicePixelRatio={Math.min(window.devicePixelRatio || 1, 2)} // Cap DPI to 2 to prevent mobile canvas crash
-                      />
-                    ) : (
-                      <div className="bg-slate-400/20 rounded-lg animate-pulse flex items-center justify-center text-slate-400 font-bold text-2xl" style={{ height: height, width: renderedWidth }}>
-                        {pageNum}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </Document>
-          )
-        ) : <div className="text-white">Dosya hazırlanıyor...</div>}
+                  return (
+                    <div key={`page-wrapper-${pageNum}`} id={`page-${pageNum}`} className="mb-4 transition-all duration-300" style={{ minHeight: height, width: renderedWidth }}>
+                      {isVisible ? (
+                        <SinglePDFPage
+                          pageNumber={pageNum}
+                          scale={scale}
+                          width={renderedWidth}
+                          toolMode={toolMode}
+                          penColor={penColor}
+                          annotations={annotations[pageNum] || []}
+                          onAnnotationAdd={addAnnotation}
+                          onPageLoad={handlePageLoad}
+                          devicePixelRatio={Math.min(window.devicePixelRatio || 1, 2)} // Cap DPI to 2 to prevent mobile canvas crash
+                        />
+                      ) : (
+                        <div className="bg-slate-400/20 rounded-lg animate-pulse flex items-center justify-center text-slate-400 font-bold text-2xl" style={{ height: height, width: renderedWidth }}>
+                          {pageNum}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </Document>
+            )
+          ) : <div className="text-white">Dosya hazırlanıyor...</div>}
+        </div> {/* End Inner Wrapper */}
       </div>
 
       {/* Current Page Indicator / Jump Trigger */}
