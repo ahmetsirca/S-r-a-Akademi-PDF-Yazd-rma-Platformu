@@ -7,12 +7,19 @@ import { Document, Packer, Paragraph, HeadingLevel } from 'docx';
 import { saveAs } from 'file-saver';
 
 // Sub-component for Interactive Sentence (Moved to top or bottom, fine at top for usage)
-const InteractiveSentence: React.FC<{ text: string, words: VocabWord[], speak: (t: string) => void }> = ({ text, words, speak }) => {
+// Sub-component for Interactive Sentence
+const InteractiveSentence: React.FC<{ text: string, words: VocabWord[], speak: (t: string) => void, autoRead: boolean }> = ({ text, words, speak, autoRead }) => {
     const [translation, setTranslation] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
     const handleTranslate = async (e: React.MouseEvent) => {
         e.stopPropagation();
+
+        // Auto-read if enabled
+        if (autoRead) {
+            speak(text);
+        }
+
         if (translation) {
             setTranslation(null); // Toggle off
             return;
@@ -125,7 +132,13 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
     // Feature State
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [showShareMenu, setShowShareMenu] = useState(false);
-    const [isViewerEditing, setIsViewerEditing] = useState(false); // New state for inline editing
+    const [isViewerEditing, setIsViewerEditing] = useState(false);
+
+    // TTS State
+    const [readingSpeed, setReadingSpeed] = useState(1.0);
+    const [autoRead, setAutoRead] = useState(false);
+    const [isReadingStory, setIsReadingStory] = useState(false);
+    const synthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
 
     useEffect(() => {
         loadData();
@@ -260,9 +273,37 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             window.speechSynthesis.cancel(); // Stop previous
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'en-US';
+            utterance.rate = readingSpeed;
             window.speechSynthesis.speak(utterance);
         }
     };
+
+    const handleReadWholeStory = () => {
+        if (isReadingStory) {
+            window.speechSynthesis.cancel();
+            setIsReadingStory(false);
+            return;
+        }
+
+        if (!content) return;
+
+        setIsReadingStory(true);
+        const utterance = new SpeechSynthesisUtterance(content);
+        utterance.lang = 'en-US';
+        utterance.rate = readingSpeed;
+        utterance.onend = () => setIsReadingStory(false);
+        utterance.onerror = () => setIsReadingStory(false);
+
+        synthesisRef.current = utterance;
+        window.speechSynthesis.speak(utterance);
+    };
+
+    // Stop speaking when unmounting
+    useEffect(() => {
+        return () => {
+            window.speechSynthesis.cancel();
+        };
+    }, []);
 
     // --- EXPORT FEATURES ---
     const exportPDF = () => {
@@ -589,6 +630,39 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                         </button>
                     )}
 
+                    {/* TTS Controls */}
+                    <div className="flex items-center gap-2 border-r border-slate-300 pr-2 mr-2">
+                        <button
+                            onClick={handleReadWholeStory}
+                            className={`p-2 rounded transition ${isReadingStory ? 'text-red-600 bg-red-50 hover:bg-red-100' : 'text-slate-500 hover:text-green-600 hover:bg-green-50'}`}
+                            title={isReadingStory ? "Okumayı Durdur" : "Tüm Hikayeyi Oku"}
+                        >
+                            <i className={`fas ${isReadingStory ? 'fa-stop-circle' : 'fa-play-circle'} text-lg`}></i>
+                        </button>
+
+                        <div className="flex flex-col items-center gap-0 w-24">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase">Hız: {readingSpeed}x</span>
+                            <input
+                                type="range"
+                                min="0.5"
+                                max="1.5"
+                                step="0.1"
+                                value={readingSpeed}
+                                onChange={(e) => setReadingSpeed(parseFloat(e.target.value))}
+                                className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                            />
+                        </div>
+
+                        <button
+                            onClick={() => setAutoRead(!autoRead)}
+                            className={`p-2 rounded transition text-xs font-bold flex flex-col items-center leading-none ${autoRead ? 'text-blue-600 bg-blue-50' : 'text-slate-400 hover:bg-slate-50'}`}
+                            title="Cümleye tıklayınca otomatik oku"
+                        >
+                            <i className={`fas ${autoRead ? 'fa-check-square' : 'fa-square'} mb-1`}></i>
+                            <span>Oto-Ses</span>
+                        </button>
+                    </div>
+
                     <div className="relative">
                         <button
                             onClick={(e) => { e.stopPropagation(); setShowShareMenu(!showShareMenu); }}
@@ -682,6 +756,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                                                     text={sentence}
                                                     words={words}
                                                     speak={speak}
+                                                    autoRead={autoRead}
                                                 />
                                             ));
                                         })()}
