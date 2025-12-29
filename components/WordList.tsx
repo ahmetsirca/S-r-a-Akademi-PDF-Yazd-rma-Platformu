@@ -12,6 +12,11 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
     const [newTerm, setNewTerm] = useState('');
     const [newDef, setNewDef] = useState('');
 
+    // Editing State
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editTerm, setEditTerm] = useState('');
+    const [editDef, setEditDef] = useState('');
+
     useEffect(() => {
         loadWords();
     }, [notebookId]);
@@ -23,7 +28,7 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
         setLoading(false);
     };
 
-    // Auto-translate debounce
+    // Auto-translate debounce for NEW words
     useEffect(() => {
         const translate = async () => {
             if (!newTerm || newTerm.length < 2) return;
@@ -57,6 +62,22 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
         if (!confirm('Silmek istediğinize emin misiniz?')) return;
         await DBService.deleteNotebookWord(id);
         setWords(words.filter(w => w.id !== id));
+    };
+
+    const startEditing = (word: VocabWord) => {
+        setEditingId(word.id);
+        setEditTerm(word.term);
+        setEditDef(word.definition);
+    };
+
+    const handleUpdate = async () => {
+        if (!editingId || !editTerm || !editDef) return;
+        await DBService.updateNotebookWord(editingId, editTerm, editDef);
+
+        setWords(words.map(w => w.id === editingId ? { ...w, term: editTerm, definition: editDef } : w));
+        setEditingId(null);
+        setEditTerm('');
+        setEditDef('');
     };
 
     const speak = (text: string) => {
@@ -101,25 +122,64 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
                 ) : (
                     words.map(w => (
                         <div key={w.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between group hover:border-blue-200 transition">
-                            <div className="flex items-center gap-4">
-                                <button
-                                    onClick={() => speak(w.term)}
-                                    className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition"
-                                    title="Dinle"
-                                >
-                                    <i className="fas fa-volume-up"></i>
-                                </button>
-                                <div>
-                                    <h4 className="font-bold text-lg text-slate-800">{w.term}</h4>
-                                    <p className="text-slate-500">{w.definition}</p>
+                            {editingId === w.id ? (
+                                // Edit Mode Row
+                                <div className="flex-1 flex flex-col md:flex-row gap-4 items-center">
+                                    <input
+                                        className="flex-1 p-2 border rounded border-blue-300 outline-none font-bold"
+                                        value={editTerm}
+                                        onChange={e => setEditTerm(e.target.value)}
+                                        placeholder="İngilizce"
+                                    />
+                                    <input
+                                        className="flex-1 p-2 border rounded border-blue-300 outline-none"
+                                        value={editDef}
+                                        onChange={e => setEditDef(e.target.value)}
+                                        placeholder="Türkçe"
+                                    />
+                                    <div className="flex gap-2">
+                                        <button onClick={handleUpdate} className="bg-green-600 text-white px-3 py-2 rounded font-bold text-sm hover:bg-green-700">
+                                            <i className="fas fa-check"></i>
+                                        </button>
+                                        <button onClick={() => setEditingId(null)} className="bg-slate-200 text-slate-600 px-3 py-2 rounded font-bold text-sm hover:bg-slate-300">
+                                            <i className="fas fa-times"></i>
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                            <button
-                                onClick={() => handleDelete(w.id)}
-                                className="text-slate-300 hover:text-red-500 p-2 opacity-0 group-hover:opacity-100 transition"
-                            >
-                                <i className="fas fa-trash"></i>
-                            </button>
+                            ) : (
+                                // View Mode Row
+                                <>
+                                    <div className="flex items-center gap-4">
+                                        <button
+                                            onClick={() => speak(w.term)}
+                                            className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition"
+                                            title="Dinle"
+                                        >
+                                            <i className="fas fa-volume-up"></i>
+                                        </button>
+                                        <div>
+                                            <h4 className="font-bold text-lg text-slate-800">{w.term}</h4>
+                                            <p className="text-slate-500">{w.definition}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                                        <button
+                                            onClick={() => startEditing(w)}
+                                            className="text-slate-300 hover:text-blue-500 p-2"
+                                            title="Düzenle"
+                                        >
+                                            <i className="fas fa-pen"></i>
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(w.id)}
+                                            className="text-slate-300 hover:text-red-500 p-2"
+                                            title="Sil"
+                                        >
+                                            <i className="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     ))
                 )}

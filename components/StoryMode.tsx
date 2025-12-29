@@ -194,8 +194,19 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
     };
 
     const shareStory = (platform: string) => {
+        if (!editingId && !title) {
+            alert("Paylaşmak için önce bir hikaye seçin veya kaydedin.");
+            return;
+        }
+        // Use editingId if available, otherwise we can't share a new unsaved story.
+        // If editingId is null, user is writing a NEW story.
+        if (!editingId) {
+            alert("Lütfen önce hikayeyi kaydedin.");
+            return;
+        }
+
         const shareText = `"${title}" - Sırça Akademi'de yazdığım hikayeyi oku!`;
-        const shareUrl = window.location.href; // Or a specific public link if available later
+        const shareUrl = `${window.location.origin}/#/story/${editingId}`;
 
         let url = '';
         switch (platform) {
@@ -257,6 +268,38 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
         }
     };
 
+    const handleAddWord = async () => {
+        if (!popover || !notebookId) return;
+        const term = popover.text.trim();
+        if (!term) return;
+
+        // Auto translate for definition
+        let def = '...';
+        try {
+            const res = await fetch(`https://api.mymemory.translated.net/get?q=${term}&langpair=en|tr`);
+            const data = await res.json();
+            if (data.responseData.translatedText) {
+                def = data.responseData.translatedText;
+            }
+        } catch (e) {
+            console.error("Trans fail", e);
+        }
+
+        const res = await DBService.addNotebookWord(notebookId, term, def);
+        if (res) {
+            // Optimistically update highlighting
+            setWords(prev => [res, ...prev]);
+            setPopover(null);
+
+            // Show toast
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-50 animate-fade-in';
+            toast.innerText = `"${term}" eklendi!`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        }
+    };
+
     // Helper to render interactive text
     const renderInteractiveContent = (text: string) => {
         const tokens = text.split(/(\s+|[.,!?;])/);
@@ -306,6 +349,12 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                             className="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded text-sm flex items-center gap-2"
                         >
                             <i className="fas fa-language"></i> Çevir
+                        </button>
+                        <button
+                            onClick={handleAddWord}
+                            className="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-sm flex items-center gap-2"
+                        >
+                            <i className="fas fa-plus"></i> Ekle
                         </button>
                     </div>
                     {translation && (
@@ -475,9 +524,39 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                             ) : (
                                 // READ MODE
                                 <>
-                                    <h2 className="text-3xl font-bold text-slate-800 mb-8 text-center font-serif tracking-wide border-b border-slate-100 pb-4">{title || 'Başlıksız Hikaye'}</h2>
-                                    <div className="text-xl leading-loose text-slate-800 font-serif break-words text-justify">
-                                        {renderInteractiveContent(content)}
+                                    <div className="mb-4 text-center">
+                                        <h2 className="text-3xl font-bold text-slate-800 font-serif tracking-wide">{title || 'Başlıksız Hikaye'}</h2>
+                                        <p className="text-xs text-slate-400 mt-2">Cümlelerin üzerine tıklayarak Türkçe çevirisini görebilirsiniz.</p>
+                                    </div>
+
+                                    <div
+                                        className="text-xl leading-loose text-slate-800 font-serif break-words text-justify"
+                                    // Specific handler for sentence clicks to avoid conflict with text selection
+                                    // We use logic: if selection exists, popover shows. If click without selection, sentence translation shows.
+                                    >
+                                        {(() => {
+                                            // Split by sentence terminators but keep them
+                                            // Regex lookbehind/lookahead might be complex for split, so we use a simple match
+                                            // Split by (. ! ?) but keep delimiter
+                                            const sentences = content.match(/[^\.!\?]+[\.!\?]+|[^\.!\?]+$/g) || [content];
+
+                                            // State for toggled translations is needed per sentence?
+                                            // We can't use useState inside mapping. 
+                                            // We need a wrapper component or manage a list of "expandedSentenceIndices" in parent.
+                                            // Let's use a parent state: `const [expandedSentences, setExpandedSentences] = useState<number[]>([]);`
+                                            // But wait, I can't add state inside this render block.
+                                            // I need to refactor this render logic OR use a small sub-component.
+                                            // For speed/simplicity in this file, I'll use a sub-component defined outside or just manage state in StoryMode.
+
+                                            return sentences.map((sentence, index) => (
+                                                <InteractiveSentence
+                                                    key={index}
+                                                    text={sentence}
+                                                    words={words}
+                                                    speak={speak}
+                                                />
+                                            ));
+                                        })()}
                                     </div>
                                 </>
                             )}
@@ -499,3 +578,71 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
 };
 
 export default StoryMode;
+
+// Sub-component for Interactive Sentence
+const InteractiveSentence: React.FC<{ text: string, words: VocabWord[], speak: (t: string) => void }> = ({ text, words, speak }) => {
+    const [translation, setTranslation] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+
+    const handleTranslate = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (translation) {
+            setTranslation(null); // Toggle off
+            return;
+        }
+        setLoading(true);
+        try {
+            const res = await fetch(`https://api.mymemory.translated.net/get?q=${text.replace(/[.!?]/g, '')}&langpair=en|tr`);
+            const data = await res.json();
+            if (data.responseData.translatedText) {
+                setTranslation(data.responseData.translatedText);
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Word highlighting logic
+    const renderTokens = () => {
+        const tokens = text.split(/(\s+|[.,!?;])/);
+        return tokens.map((token, i) => {
+            const cleanToken = token.replace(/[.,!?;]/g, '').toLowerCase().trim();
+            if (!cleanToken) return <span key={i}>{token}</span>;
+
+            const match = words.find(w => w.term.toLowerCase() === cleanToken);
+            if (match) {
+                return (
+                    <span
+                        key={i}
+                        className="text-blue-600 font-bold cursor-pointer hover:bg-blue-100 rounded px-0.5 transition relative group"
+                        onClick={(e) => { e.stopPropagation(); speak(match.term); }}
+                    >
+                        {token}
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10 transition shadow-lg">
+                            {match.definition}
+                        </span>
+                    </span>
+                );
+            }
+            return <span key={i} className="hover:text-slate-600 transition">{token}</span>;
+        });
+    };
+
+    return (
+        <span
+            className="hover:bg-yellow-50/50 cursor-pointer rounded transition duration-300 relative inline"
+            onClick={handleTranslate}
+            title="Cümle çevirisi için tıkla"
+        >
+            {renderTokens()}
+            {(translation || loading) && (
+                <span className="block my-2 p-3 bg-indigo-50 text-indigo-800 text-lg font-sans rounded-r-xl border-l-4 border-indigo-500 animate-scale-in select-text cursor-auto shadow-sm" onClick={e => e.stopPropagation()}>
+                    {loading ? <i className="fas fa-spinner fa-spin text-indigo-400"></i> : <><i className="fas fa-language mr-2 text-indigo-400"></i> {translation}</>}
+                </span>
+            )}
+            {" "}
+        </span>
+    );
+};

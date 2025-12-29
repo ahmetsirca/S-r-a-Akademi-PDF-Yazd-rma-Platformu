@@ -5,6 +5,7 @@ import { DBService } from './services/db';
 import { AuthService } from './services/auth';
 const AdminDashboard = React.lazy(() => import('./components/AdminDashboard'));
 const FlashcardMode = React.lazy(() => import('./components/FlashcardMode'));
+const PublicStoryViewer = React.lazy(() => import('./components/PublicStoryViewer')); // Lazy load
 import UserViewer from './components/UserViewer';
 import VocabularyNotebook from './components/VocabularyNotebook';
 import { Session } from '@supabase/supabase-js';
@@ -26,6 +27,8 @@ const App: React.FC = () => {
 
     if (fullUrl.includes('flashcard')) return true;
     if (hash.includes('flashcard')) return true;
+    if (fullUrl.includes('story')) return true; // Story Public Mode
+    if (hash.includes('story')) return true; // Story Public Mode
 
     return false;
   });
@@ -38,9 +41,15 @@ const App: React.FC = () => {
     const pathMatch = hash.match(/\/flashcard\/([\w-]+)/); // Flexible regex
     if (pathMatch && pathMatch[1]) return pathMatch[1];
 
-    // 2. Try Standard Param notebookId=ID
+    // 3. Try Story Path /#/story/ID
+    const storyMatch = hash.match(/\/story\/([\w-]+)/);
+    if (storyMatch && storyMatch[1]) return storyMatch[1];
+
+    // 4. Try Query Params
     const paramMatch = fullUrl.match(/notebookId=([\w-]+)/);
     if (paramMatch && paramMatch[1]) return paramMatch[1];
+    const storyParamMatch = fullUrl.match(/storyId=([\w-]+)/);
+    if (storyParamMatch && storyParamMatch[1]) return storyParamMatch[1];
 
     const hashParamMatch = hash.match(/notebookId=([\w-]+)/);
     if (hashParamMatch && hashParamMatch[1]) return hashParamMatch[1];
@@ -75,7 +84,7 @@ const App: React.FC = () => {
             <div className="bg-green-600 text-white w-8 h-8 rounded flex items-center justify-center">
               <i className="fas fa-layer-group"></i>
             </div>
-            <h2 className="font-bold text-slate-800 text-lg">Sırça Akademi Flashcard</h2>
+            <h2 className="font-bold text-slate-800 text-lg">Sırça Akademi {window.location.href.includes('story') ? 'Hikaye' : 'Flashcard'}</h2>
           </div>
           <button
             onClick={() => { window.location.href = window.location.pathname; }}
@@ -86,7 +95,11 @@ const App: React.FC = () => {
         </div>
         <div className="flex-1 overflow-auto">
           <React.Suspense fallback={<div className="p-10 text-center">Yükleniyor...</div>}>
-            <FlashcardMode notebookId={publicNoteId} />
+            {window.location.href.includes('story') ? (
+              <PublicStoryViewer storyId={publicNoteId} />
+            ) : (
+              <FlashcardMode notebookId={publicNoteId} />
+            )}
           </React.Suspense>
         </div>
       </div>

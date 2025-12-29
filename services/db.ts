@@ -147,6 +147,12 @@ export const DBService = {
     return (data || []).map((s: any) => ({ ...s, notebookId: s.notebook_id, createdAt: s.created_at }));
   },
 
+  async getStoryById(id: string) {
+    const { data, error } = await supabase.from('vocab_stories').select('*').eq('id', id).single();
+    if (error) return null;
+    return { ...data, notebookId: data.notebook_id, createdAt: data.created_at };
+  },
+
   async createStory(notebookId: string, title: string, content: string) {
     const { data, error } = await supabase.from('vocab_stories').insert({ notebook_id: notebookId, title, content }).select().single();
     if (error) {
