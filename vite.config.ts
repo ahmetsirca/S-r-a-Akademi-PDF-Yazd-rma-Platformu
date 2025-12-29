@@ -41,14 +41,12 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks: {
             // Core React
-            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-react': ['react', 'react-dom'],
             // PDF libraries are huge, split them out
             'pdf-worker': ['pdfjs-dist'],
             'pdf-viewer': ['react-pdf'],
             // Supabase
             'vendor-supabase': ['@supabase/supabase-js'],
-            // Icons/UI
-            'vendor-ui': ['lucide-react', 'framer-motion']
           }
         }
       },
