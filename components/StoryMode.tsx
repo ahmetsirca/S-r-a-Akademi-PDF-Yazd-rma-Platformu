@@ -1,9 +1,106 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { VocabStory, VocabWord } from '../types';
 import { DBService } from '../services/db';
+import { supabase } from '../services/supabase';
 import { jsPDF } from 'jspdf';
-import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
+import { Document, Packer, Paragraph, HeadingLevel } from 'docx';
 import { saveAs } from 'file-saver';
+
+// Sub-component for Interactive Sentence (Moved to top or bottom, fine at top for usage)
+const InteractiveSentence: React.FC<{ text: string, words: VocabWord[], speak: (t: string) => void }> = ({ text, words, speak }) => {
+    const [translation, setTranslation] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+
+    const handleTranslate = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (translation) {
+            setTranslation(null); // Toggle off
+            return;
+        }
+        setLoading(true);
+        try {
+            const res = await fetch(`https://api.mymemory.translated.net/get?q=${text.replace(/[.!?]/g, '')}&langpair=en|tr`);
+            const data = await res.json();
+            if (data.responseData.translatedText) {
+                setTranslation(data.responseData.translatedText);
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Improved Match Logic with Suffix Support
+    const findMatch = (rawToken: string) => {
+        const clean = rawToken.replace(/[.,!?;:()"']/g, '').trim();
+        if (!clean) return null;
+
+        const lower = clean.toLocaleLowerCase('tr-TR');
+        const enLower = clean.toLowerCase();
+
+        // 1. Exact Match
+        let match = words.find(w => w.term.toLowerCase() === lower || w.term.toLowerCase() === enLower);
+        if (match) return match;
+
+        // 2. English Suffix Check
+        match = words.find(w => {
+            const term = w.term.toLowerCase();
+            if (enLower === term + 's') return true;
+            if (enLower === term + 'es') return true;
+            if (enLower === term + 'd') return true;
+            if (enLower === term + 'ed') return true;
+            if (enLower === term + 'ing') return true;
+            if (enLower === term + 'ly') return true;
+            if (enLower === term + 'ies') return true;
+            if (enLower.endsWith('ies') && term.endsWith('y')) {
+                if (enLower.slice(0, -3) === term.slice(0, -1)) return true;
+            }
+            return false;
+        });
+
+        return match;
+    };
+
+    const renderTokens = () => {
+        const tokens = text.split(/(\s+|[.,!?;])/);
+        return tokens.map((token, i) => {
+            const match = findMatch(token);
+
+            if (match) {
+                return (
+                    <span
+                        key={i}
+                        className="text-blue-600 font-bold cursor-pointer hover:bg-blue-100 rounded px-0.5 transition relative group"
+                        onClick={(e) => { e.stopPropagation(); speak(match.term); }}
+                    >
+                        {token}
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10 transition shadow-lg">
+                            {match.definition}
+                        </span>
+                    </span>
+                );
+            }
+            return <span key={i} className="hover:text-slate-600 transition">{token.replace(/\n/g, '')}</span>;
+        });
+    };
+
+    return (
+        <span
+            className="hover:bg-yellow-50/50 cursor-pointer rounded transition duration-300 relative inline"
+            onClick={handleTranslate}
+            title="Cümle çevirisi için tıkla"
+        >
+            {renderTokens()}
+            {(translation || loading) && (
+                <span className="block my-2 p-3 bg-indigo-50 text-indigo-800 text-lg font-sans rounded-r-xl border-l-4 border-indigo-500 animate-scale-in select-text cursor-auto shadow-sm" onClick={e => e.stopPropagation()}>
+                    {loading ? <i className="fas fa-spinner fa-spin text-indigo-400"></i> : <><i className="fas fa-language mr-2 text-indigo-400"></i> {translation}</>}
+                </span>
+            )}
+            {" "}
+        </span>
+    );
+};
 
 interface StoryModeProps {
     notebookId: string;
@@ -21,6 +118,10 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
     const [translation, setTranslation] = useState<string | null>(null);
     const viewerRef = useRef<HTMLDivElement>(null);
 
+    // Notebook Selection State
+    const [allNotebooks, setAllNotebooks] = useState<{ id: string, title: string }[]>([]);
+    const [targetNotebookId, setTargetNotebookId] = useState<string>(notebookId);
+
     // Feature State
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [showShareMenu, setShowShareMenu] = useState(false);
@@ -28,7 +129,17 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
 
     useEffect(() => {
         loadData();
+        loadNotebooks();
     }, [notebookId]);
+
+    const loadNotebooks = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            const nbs = await DBService.getNotebooks(user.id);
+            setAllNotebooks(nbs);
+            setTargetNotebookId(notebookId); // Reset to current when notebook changes
+        }
+    };
 
     // Clear popover on click outside
     useEffect(() => {
@@ -285,10 +396,13 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             console.error("Trans fail", e);
         }
 
-        const res = await DBService.addNotebookWord(notebookId, term, def);
+        // Use targetNotebookId instead of prop
+        const res = await DBService.addNotebookWord(targetNotebookId, term, def);
         if (res) {
-            // Optimistically update highlighting
-            setWords(prev => [res, ...prev]);
+            // Optimistically update highlighting IF we added to the CURRENT notebook
+            if (targetNotebookId === notebookId) {
+                setWords(prev => [res, ...prev]);
+            }
             setPopover(null);
 
             // Show toast
@@ -337,6 +451,20 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                     style={{ left: popover.x, top: popover.y }}
                     onMouseDown={(e) => e.stopPropagation()} // Prevent close on interaction
                 >
+                    {/* Notebook Selector */}
+                    {allNotebooks.length > 0 && (
+                        <select
+                            value={targetNotebookId}
+                            onChange={e => setTargetNotebookId(e.target.value)}
+                            className="bg-slate-700 text-xs border border-slate-600 rounded p-1 mb-2 w-full outline-none text-white max-w-[200px]"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            {allNotebooks.map(nb => (
+                                <option key={nb.id} value={nb.id}>{nb.title}</option>
+                            ))}
+                        </select>
+                    )}
+
                     <div className="flex gap-2">
                         <button
                             onClick={() => speak(popover.text)}
@@ -579,70 +707,4 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
 
 export default StoryMode;
 
-// Sub-component for Interactive Sentence
-const InteractiveSentence: React.FC<{ text: string, words: VocabWord[], speak: (t: string) => void }> = ({ text, words, speak }) => {
-    const [translation, setTranslation] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
 
-    const handleTranslate = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (translation) {
-            setTranslation(null); // Toggle off
-            return;
-        }
-        setLoading(true);
-        try {
-            const res = await fetch(`https://api.mymemory.translated.net/get?q=${text.replace(/[.!?]/g, '')}&langpair=en|tr`);
-            const data = await res.json();
-            if (data.responseData.translatedText) {
-                setTranslation(data.responseData.translatedText);
-            }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // Word highlighting logic
-    const renderTokens = () => {
-        const tokens = text.split(/(\s+|[.,!?;])/);
-        return tokens.map((token, i) => {
-            const cleanToken = token.replace(/[.,!?;]/g, '').toLowerCase().trim();
-            if (!cleanToken) return <span key={i}>{token}</span>;
-
-            const match = words.find(w => w.term.toLowerCase() === cleanToken);
-            if (match) {
-                return (
-                    <span
-                        key={i}
-                        className="text-blue-600 font-bold cursor-pointer hover:bg-blue-100 rounded px-0.5 transition relative group"
-                        onClick={(e) => { e.stopPropagation(); speak(match.term); }}
-                    >
-                        {token}
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10 transition shadow-lg">
-                            {match.definition}
-                        </span>
-                    </span>
-                );
-            }
-            return <span key={i} className="hover:text-slate-600 transition">{token}</span>;
-        });
-    };
-
-    return (
-        <span
-            className="hover:bg-yellow-50/50 cursor-pointer rounded transition duration-300 relative inline"
-            onClick={handleTranslate}
-            title="Cümle çevirisi için tıkla"
-        >
-            {renderTokens()}
-            {(translation || loading) && (
-                <span className="block my-2 p-3 bg-indigo-50 text-indigo-800 text-lg font-sans rounded-r-xl border-l-4 border-indigo-500 animate-scale-in select-text cursor-auto shadow-sm" onClick={e => e.stopPropagation()}>
-                    {loading ? <i className="fas fa-spinner fa-spin text-indigo-400"></i> : <><i className="fas fa-language mr-2 text-indigo-400"></i> {translation}</>}
-                </span>
-            )}
-            {" "}
-        </span>
-    );
-};
