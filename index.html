@@ -19,40 +19,51 @@
           <i class="fas fa-circle-notch fa-spin" style="color:#2563eb;"></i>
         </div>
         <div>Yükleniyor...</div>
+        <div style="font-size:12px;margin-top:10px;color:#94a3b8">v1.2.0 - Redmi Patch</div>
       </div>
     </div>
+
+    <!-- Global Shim for Older Devices -->
+    <script>
+      if (typeof global === 'undefined') {
+        window.global = window;
+      }
+    </script>
 
     <!-- Crash Handler Script -->
     <script>
       window.addEventListener('load', function () {
         const loader = document.getElementById('initial-loader');
-        // Hide loader when React mounts (React will clear innerHTML of root, but loader is inside root? No, better place separate)
-        // Actually react clears root. So putting loader inside root is good because React removes it automatically.
-        // But if React FAILS, loader stays!
 
-        // Timeout to detect crash
+        // Timeout to detect crash (Extended to 10s for mobile data)
         setTimeout(function () {
-          // If loader is still there and React hasn't taken over (root has child nodes that are THE LOADER)
+          // If loader is still there...
           if (loader && document.body.contains(loader)) {
-            loader.innerHTML = '<div style="color:#ef4444;padding:20px;max-width:300px;">' +
-              '<h3 style="font-size:18px;font-weight:bold;margin-bottom:8px;">Bağlantı Hatası</h3>' +
-              '<p style="font-size:14px;margin-bottom:16px;">Uygulama yüklenirken bir sorun oluştu. İnternet bağlantınız zayıf olabilir.</p>' +
-              '<button onclick="window.location.reload()" style="background:#2563eb;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;">Tekrar Dene</button>' +
-              '</div>';
+            // Check if root has other children (meaning React mounted but loader didn't vanish)
+            const rootHandler = document.getElementById('root');
+            if (rootHandler && rootHandler.children.length <= 3) { // purely loader + scripts
+              loader.innerHTML = '<div style="color:#ef4444;padding:20px;max-width:300px;margin:0 auto;">' +
+                '<h3 style="font-size:18px;font-weight:bold;margin-bottom:8px;">Yükleme Sorunu</h3>' +
+                '<p style="font-size:14px;margin-bottom:16px;">Sayfa yanıt vermiyor. Bağlantınız yavaş olabilir veya cihazınız bu sürümü desteklemiyor.</p>' +
+                '<button onclick="window.location.reload(true)" style="background:#2563eb;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-weight:bold;cursor:pointer;">Sayfayı Yenile</button>' +
+                '<p style="font-size:11px;margin-top:20px;color:#94a3b8">Hata Kodu: REDMI_INIT_TIMEOUT</p>' +
+                '</div>';
+            }
           }
-        }, 8000); // 8 seconds timeout
+        }, 12000);
       });
 
-      window.onerror = function () {
-        // Global error (syntax, blocking)
+      window.onerror = function (msg, url, lineNo, columnNo, error) {
         const loader = document.getElementById('initial-loader');
         if (loader) {
-          loader.innerHTML = '<div style="color:#ef4444;padding:20px;max-width:300px;">' +
-            '<h3 style="font-size:18px;font-weight:bold;margin-bottom:8px;">Kritik Hata</h3>' +
-            '<p style="font-size:14px;margin-bottom:16px;">Sayfa yüklenemedi. Lütfen yenileyin.</p>' +
-            '<button onclick="window.location.reload()" style="background:#2563eb;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;">Yenile</button>' +
+          loader.innerHTML = '<div style="color:#ef4444;padding:20px;max-width:300px;margin:0 auto;">' +
+            '<h3 style="font-size:18px;font-weight:bold;margin-bottom:8px;">Uygulama Hatası</h3>' +
+            '<p style="font-size:14px;margin-bottom:16px;">Bir hata oluştu: ' + msg + '</p>' +
+            '<button onclick="window.location.reload(true)" style="background:#2563eb;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-weight:bold;cursor:pointer;">Yeniden Dene</button>' +
             '</div>';
+          return true;
         }
+        return false;
       };
     </script>
   </div>

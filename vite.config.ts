@@ -13,10 +13,12 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       legacy({
-        targets: ['defaults', 'not IE 11', 'Android >= 5'],
+        // Aggressive targets for older mobile devices/WebViews
+        targets: ['defaults', 'not IE 11', 'Android >= 5', 'iOS >= 10', 'Chrome >= 60'],
         // Explicitly polyfill common missing features for older WebViews
-        polyfills: ['es.promise.finally', 'es/map', 'es/set'],
-        modernPolyfills: ['es.promise.finally']
+        polyfills: ['es.promise.finally', 'es/map', 'es/set', 'es.global-this', 'es.object.from-entries'],
+        modernPolyfills: ['es.promise.finally', 'es.global-this'],
+        renderLegacyChunks: true,
       })
     ],
     define: {
@@ -29,25 +31,32 @@ export default defineConfig(({ mode }) => {
       }
     },
     build: {
-      chunkSizeWarningLimit: 2000, // Increase limit
+      // Relax chunk size warning
+      chunkSizeWarningLimit: 2000,
+      // STRICTLY enforce ES2015 to avoid esnext syntax like optional chaining crashing old WebViews
       target: 'es2015',
+      minify: 'esbuild', // Faster and usually sufficient, but respects target
+      cssTarget: 'chrome61', // Prevent modern CSS cracking valid old browsers
       rollupOptions: {
         output: {
           manualChunks: {
             // Core React
-            'vendor-react': ['react', 'react-dom'],
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
             // PDF libraries are huge, split them out
             'pdf-worker': ['pdfjs-dist'],
             'pdf-viewer': ['react-pdf'],
             // Supabase
             'vendor-supabase': ['@supabase/supabase-js'],
+            // Icons/UI
+            'vendor-ui': ['lucide-react', 'framer-motion']
           }
         }
       },
     },
     optimizeDeps: {
-      include: ['pdfjs-dist'], // Explicitly include pdfjs-dist
+      include: ['pdfjs-dist'],
       esbuildOptions: {
+        // Ensure dev server also serves compatible code
         target: 'es2015',
       },
     }
