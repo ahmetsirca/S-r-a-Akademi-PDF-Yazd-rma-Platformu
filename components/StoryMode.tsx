@@ -117,11 +117,23 @@ const InteractiveSentence: React.FC<{
 
     return (
         <span
-            className="hover:bg-yellow-50/50 cursor-pointer rounded transition duration-300 relative inline"
-            onClick={handleTranslate}
-            title="Cümle çevirisi için tıkla"
+            className="hover:bg-yellow-50/50 rounded transition duration-300 relative inline"
+            onClick={handleTranslate} // Keep fallback sentence click
         >
             {renderTokens()}
+
+            {/* Explicit Translation Trigger Icon - Mobile Friendly Target */}
+            <span
+                className="inline-flex items-center justify-center w-6 h-6 ml-1 bg-indigo-100 text-indigo-600 rounded-full cursor-pointer hover:bg-indigo-200 transition text-xs align-middle shadow-sm z-10 active:scale-95"
+                onClick={(e) => {
+                    e.stopPropagation(); // Prevent double trigger
+                    handleTranslate(e);
+                }}
+                title="Bu cümleyi çevir"
+            >
+                <i className="fas fa-language"></i>
+            </span>
+
             {(translation || loading) && (
                 <span className="block my-2 p-3 bg-indigo-50 text-indigo-800 text-lg font-sans rounded-r-xl border-l-4 border-indigo-500 animate-scale-in select-text cursor-auto shadow-sm" onClick={e => e.stopPropagation()}>
                     {loading ? <i className="fas fa-spinner fa-spin text-indigo-400"></i> : <><i className="fas fa-language mr-2 text-indigo-400"></i> {translation}</>}
