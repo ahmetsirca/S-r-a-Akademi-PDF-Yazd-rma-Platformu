@@ -506,58 +506,104 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
     return (
         <div className={`grid md:grid-cols-2 gap-6 relative transition-all duration-300 ${isFullscreen ? 'fixed inset-0 z-50 bg-white p-6' : 'h-auto md:h-[600px]'}`}>
             {/* Popover */}
-            {popover && !isViewerEditing && (
-                <div
-                    className="fixed z-[9999] bg-slate-800 text-white p-2 rounded-lg shadow-xl flex flex-col items-center gap-2 transform -translate-x-1/2 -translate-y-full animate-fade-in"
-                    // Use pageX/Y if absolute to document, but for fixed we need clientX.
-                    // Previously logic might be flawed for fixed.
-                    // For simplicity let's stick to calculated logic but ensure z-index is high.
-                    style={{ left: popover.x, top: popover.y }}
-                    onMouseDown={(e) => e.stopPropagation()} // Prevent close on interaction
-                >
-                    {/* Notebook Selector */}
-                    {allNotebooks.length > 0 && (
-                        <select
-                            value={targetNotebookId}
-                            onChange={e => setTargetNotebookId(e.target.value)}
-                            className="bg-slate-700 text-xs border border-slate-600 rounded p-1 mb-2 w-full outline-none text-white max-w-[200px]"
-                            onClick={e => e.stopPropagation()}
-                        >
-                            {allNotebooks.map(nb => (
-                                <option key={nb.id} value={nb.id}>{nb.title}</option>
-                            ))}
-                        </select>
-                    )}
+            {popover && !isViewerEditing && (() => {
+                // Smart Positioning Logic
+                const screenW = window.innerWidth;
+                const isRightEdge = popover.x > screenW * 0.6; // If click is in the right 40%
+                const isLeftEdge = popover.x < screenW * 0.4;  // If click is in the left 40%
 
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => speak(popover.text)}
-                            className="bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-sm flex items-center gap-2"
-                        >
-                            <i className="fas fa-volume-up"></i> Dinle
-                        </button>
-                        <button
-                            onClick={handleTranslateSelection}
-                            className="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded text-sm flex items-center gap-2"
-                        >
-                            <i className="fas fa-language"></i> Çevir
-                        </button>
-                        <button
-                            onClick={handleAddWord}
-                            className="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-sm flex items-center gap-2"
-                        >
-                            <i className="fas fa-plus"></i> Ekle
-                        </button>
-                    </div>
-                    {translation && (
-                        <div className="text-xs text-center border-t border-slate-600 pt-2 mt-1 w-full max-w-[200px]">
-                            {translation}
+                let containerStyle: React.CSSProperties = { top: popover.y };
+                let containerClass = "fixed z-[9999] bg-slate-800 text-white p-2 rounded-lg shadow-xl flex flex-col items-center gap-2 animate-fade-in";
+                let arrowStyle: React.CSSProperties = {};
+                let arrowClass = "absolute top-full border-8 border-transparent border-t-slate-800";
+
+                if (isRightEdge) {
+                    // Align to Right
+                    containerStyle = { ...containerStyle, right: Math.max(10, screenW - popover.x - 100), left: 'auto', transform: 'translateY(-100%)' };
+                    // Wait, popover.y is usually top coordinate, we want it ABOVE the word? 
+                    // Previous logic: transform -translate-y-full (which is present in class lists usually or managed manually)
+                    // Let's check original generic style: transform -translate-x-1/2 -translate-y-full
+
+                    // Let's stick to standard "left" clamping
+                    // Clamp Left: min(max(10, x - width/2), screenW - width - 10)
+                    // But width is dynamic.
+
+                    // Simpler Relative Approach:
+                    containerStyle = { ...containerStyle, top: popover.y, transform: 'translateY(-100%)' };
+                    // We will set LEFT and avoid translate-x for edge cases
+
+                    containerStyle.right = '10px';
+                    containerStyle.left = 'auto';
+
+                    // Arrow needs to point to popover.x
+                    // Popover is at Right 10px. Width is approx 200px?
+                    // We can calc arrow offset from RIGHT.
+                    // ArrowRight = ScreenWidth - PopoverX.
+                    arrowStyle = { right: (screenW - popover.x - 10) + 'px' };
+                    arrowClass += " right-0"; // Reset left
+                } else if (isLeftEdge) {
+                    containerStyle = { ...containerStyle, top: popover.y, transform: 'translateY(-100%)' };
+                    containerStyle.left = '10px';
+                    containerStyle.right = 'auto';
+
+                    // Arrow Left = PopoverX - 10px
+                    arrowStyle = { left: (popover.x - 10) + 'px' };
+                } else {
+                    // Center (Default)
+                    containerStyle = { ...containerStyle, left: popover.x, top: popover.y, transform: 'translate(-50%, -100%)' };
+                    arrowClass += " left-1/2 -translate-x-1/2";
+                }
+
+                return (
+                    <div
+                        className={containerClass}
+                        style={containerStyle}
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        {/* Notebook Selector */}
+                        {allNotebooks.length > 0 && (
+                            <select
+                                value={targetNotebookId}
+                                onChange={e => setTargetNotebookId(e.target.value)}
+                                className="bg-slate-700 text-xs border border-slate-600 rounded p-1 mb-2 w-full outline-none text-white max-w-[200px]"
+                                onClick={e => e.stopPropagation()}
+                            >
+                                {allNotebooks.map(nb => (
+                                    <option key={nb.id} value={nb.id}>{nb.title}</option>
+                                ))}
+                            </select>
+                        )}
+
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => speak(popover.text)}
+                                className="bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-sm flex items-center gap-2"
+                            >
+                                <i className="fas fa-volume-up"></i>
+                            </button>
+                            <button
+                                onClick={handleTranslateSelection}
+                                className="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded text-sm flex items-center gap-2"
+                            >
+                                <i className="fas fa-language"></i> Çevir
+                            </button>
+                            <button
+                                onClick={handleAddWord}
+                                className="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-sm flex items-center gap-2"
+                            >
+                                <i className="fas fa-plus"></i> Ekle
+                            </button>
                         </div>
-                    )}
-                    {/* Triangle */}
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-800"></div>
-                </div>
-            )}
+                        {translation && (
+                            <div className="text-xs text-center border-t border-slate-600 pt-2 mt-1 w-full max-w-[200px]">
+                                {translation}
+                            </div>
+                        )}
+                        {/* Triangle */}
+                        <div className={arrowClass} style={arrowStyle}></div>
+                    </div>
+                );
+            })()}
 
             {/* Left: Story List & Editor */}
             <div className={`flex flex-col gap-4 h-full ${isFullscreen ? 'hidden' : 'min-h-[400px]'}`}>
