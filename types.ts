@@ -118,3 +118,11 @@ export interface VocabStory {
 }
 
 
+export interface QuizQuestion {
+  id: string;
+  question_text: string;
+  options: string[];
+  correct_answer: string;
+  explanation?: string;
+  created_at?: string;
+}

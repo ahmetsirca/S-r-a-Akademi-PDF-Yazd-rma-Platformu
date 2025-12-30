@@ -221,3 +221,26 @@ export const DBService = {
     return await supabase.from('user_devices').delete().eq('id', deviceId);
   }
 };
+
+export const QuizService = {
+  async getQuestions() {
+    const { data, error } = await supabase
+      .from('quiz_questions')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error("Quiz Fetch Error:", error);
+      return [];
+    }
+
+    return (data || []).map(q => ({
+      id: q.id,
+      question_text: q.question_text,
+      options: q.options, // Assumes JSONB array
+      correct_answer: q.correct_answer,
+      explanation: q.explanation,
+      created_at: q.created_at
+    }));
+  }
+};
