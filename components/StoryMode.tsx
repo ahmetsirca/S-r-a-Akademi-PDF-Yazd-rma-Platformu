@@ -122,16 +122,18 @@ const InteractiveSentence: React.FC<{
         >
             {renderTokens()}
 
-            {/* Explicit Translation Trigger Icon - Mobile Friendly Target */}
+            {/* Explicit Translation Trigger Icon - Mobile Friendly Target - DESKTOP FIX */}
             <span
-                className="inline-flex items-center justify-center w-6 h-6 ml-1 bg-indigo-100 text-indigo-600 rounded-full cursor-pointer hover:bg-indigo-200 transition text-xs align-middle shadow-sm z-10 active:scale-95"
+                className="inline-flex items-center justify-center w-8 h-8 ml-2 bg-indigo-600 text-white rounded-full cursor-pointer hover:bg-indigo-700 transition shadow-md z-20 select-none"
+                style={{ verticalAlign: 'middle', display: 'inline-flex' }}
                 onClick={(e) => {
+                    e.preventDefault();
                     e.stopPropagation(); // Prevent double trigger
                     handleTranslate(e);
                 }}
                 title="Bu cümleyi çevir"
             >
-                <i className="fas fa-language"></i>
+                <span className="text-sm font-bold">TR</span>
             </span>
 
             {(translation || loading) && (
