@@ -8,7 +8,13 @@ import { saveAs } from 'file-saver';
 
 // Sub-component for Interactive Sentence (Moved to top or bottom, fine at top for usage)
 // Sub-component for Interactive Sentence
-const InteractiveSentence: React.FC<{ text: string, words: VocabWord[], speak: (t: string) => void, autoRead: boolean }> = ({ text, words, speak, autoRead }) => {
+const InteractiveSentence: React.FC<{
+    text: string,
+    words: VocabWord[],
+    speak: (t: string) => void,
+    autoRead: boolean,
+    onWordClick: (text: string, x: number, y: number) => void // New Prop
+}> = ({ text, words, speak, autoRead, onWordClick }) => {
     const [translation, setTranslation] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
@@ -88,7 +94,24 @@ const InteractiveSentence: React.FC<{ text: string, words: VocabWord[], speak: (
                     </span>
                 );
             }
-            return <span key={i} className="hover:text-slate-600 transition">{token.replace(/\n/g, '')}</span>;
+            // Make non-matched words clickable for popover
+            // Only make "word-like" tokens clickable
+            if (token.trim() && !/^[.,!?;:()"'\s]+$/.test(token)) {
+                return (
+                    <span
+                        key={i}
+                        className="hover:text-blue-500 hover:bg-yellow-100 transition cursor-pointer select-none"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            // Use e.clientX/Y for fixed calculation in StoryMode proper
+                            onWordClick(token.replace(/[.,!?;:()"']/g, ''), e.clientX, e.clientY);
+                        }}
+                    >
+                        {token}
+                    </span>
+                );
+            }
+            return <span key={i} className="text-slate-700">{token.replace(/\n/g, '')}</span>;
         });
     };
 
@@ -757,6 +780,11 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                                                     words={words}
                                                     speak={speak}
                                                     autoRead={autoRead}
+                                                    onWordClick={(text, x, y) => {
+                                                        // Explicit interaction override
+                                                        setPopover({ x, y, text });
+                                                        setTranslation(null);
+                                                    }}
                                                 />
                                             ));
                                         })()}
