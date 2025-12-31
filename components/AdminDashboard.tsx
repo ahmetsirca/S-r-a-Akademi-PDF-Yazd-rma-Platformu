@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { StorageService } from '../services/storage';
 import { PDFBook, AccessKey, Collection } from '../types';
+import * as pdfjsLib from 'pdfjs-dist';
+import mammoth from 'mammoth';
+import { QuestionParser } from '../utils/QuestionParser';
+import { QuizService } from '../services/db';
+
+// Set worker source for pdf.js
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  // Tabs: 'KEYS' = Legacy Key Management, 'COURSES' = New Folder/Course Management, 'USERS' = User Management, 'LOGS' = Activity Logs
-  const [adminTab, setAdminTab] = useState<'KEYS' | 'COURSES' | 'USERS' | 'LOGS'>('KEYS');
+  // Tabs: 'KEYS' = Legacy Key Management, 'COURSES' = New Folder/Course Management, 'USERS' = User Management, 'LOGS' = Activity Logs, 'QUIZ' = Quiz Upload
+  const [adminTab, setAdminTab] = useState<'KEYS' | 'COURSES' | 'USERS' | 'LOGS' | 'QUIZ'>('KEYS');
 
   // -- EXISTING STATE (Keys) --
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -67,6 +74,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   // Device Management State
   const [deviceModalOpen, setDeviceModalOpen] = useState(false);
   const [userDevices, setUserDevices] = useState<any[]>([]);
+
+  // -- QUIZ STATE --
+  const [quizFile, setQuizFile] = useState<File | null>(null);
+  const [isParsing, setIsParsing] = useState(false);
+  const [parsedQuestions, setParsedQuestions] = useState<any[]>([]);
 
   // Auto-refresh for online status
   useEffect(() => {

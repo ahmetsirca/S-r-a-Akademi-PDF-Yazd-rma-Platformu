@@ -242,5 +242,22 @@ export const QuizService = {
       explanation: q.explanation,
       created_at: q.created_at
     }));
+  },
+
+  async createQuestionsBulk(questions: any[]) {
+    const { data, error } = await supabase
+      .from('quiz_questions')
+      .insert(questions.map(q => ({
+        question_text: q.question_text,
+        options: q.options,
+        correct_answer: q.correct_answer,
+        explanation: q.explanation
+      })));
+
+    if (error) {
+      console.error("Bulk Create Error:", error);
+      throw error;
+    }
+    return data;
   }
 };
