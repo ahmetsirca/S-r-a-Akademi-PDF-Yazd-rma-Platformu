@@ -1,13 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { StorageService } from '../services/storage';
 import { PDFBook, AccessKey, Collection } from '../types';
-import * as pdfjsLib from 'pdfjs-dist';
-import mammoth from 'mammoth';
 import { QuestionParser } from '../utils/QuestionParser';
 import { QuizService } from '../services/db';
-
-// Set worker source for pdf.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -76,7 +71,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [userDevices, setUserDevices] = useState<any[]>([]);
 
   // -- QUIZ STATE --
-  const [quizFile, setQuizFile] = useState<File | null>(null);
+  const [quizText, setQuizText] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [parsedQuestions, setParsedQuestions] = useState<any[]>([]);
 
@@ -372,48 +367,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   };
 
   // -- QUIZ HANDLERS --
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleParseText = async () => {
+    if (!quizText.trim()) return;
 
-    setQuizFile(file);
     setIsParsing(true);
     setParsedQuestions([]);
 
     try {
-      let text = '';
-      if (file.name.endsWith('.pdf')) {
-        // Use static pdfjsLib
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        let fullText = '';
-
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const textContent = await page.getTextContent();
-          const pageText = textContent.items.map((item: any) => item.str).join(' ');
-          fullText += pageText + '\n';
-        }
-        text = fullText;
-
-      } else if (file.name.endsWith('.docx')) {
-        // Use static mammoth
-        const arrayBuffer = await file.arrayBuffer();
-        const result = await mammoth.extractRawText({ arrayBuffer });
-        text = result.value;
-      }
-
-      const questions = QuestionParser.parse(text);
+      // Direct parsing from text
+      const questions = QuestionParser.parse(quizText);
       setParsedQuestions(questions);
-
     } catch (error: any) {
       console.error("Parsing error:", error);
-      alert("Dosya okunurken hata oluştu: " + error.message);
+      alert("Ayrıştırma hatası: " + error.message);
     } finally {
       setIsParsing(false);
     }
   };
-
 
   const handleSaveQuiz = async () => {
     if (parsedQuestions.length === 0) return;
@@ -421,7 +391,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       await QuizService.createQuestionsBulk(parsedQuestions);
       alert(`${parsedQuestions.length} soru başarıyla kaydedildi!`);
       setParsedQuestions([]);
-      setQuizFile(null);
+      setQuizText('');
     } catch (error: any) {
       console.error("Save error:", error);
       alert("Kaydetme hatası: " + error.message);
@@ -1014,13 +984,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             <p className="text-slate-500 mt-2">Word veya PDF dosyanızı yükleyin, soruları otomatik ayrıştıralım.</p>
           </div>
 
-          <div className="max-w-xl mx-auto mb-8">
-            <label className="block w-full cursor-pointer bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center hover:bg-indigo-50 hover:border-indigo-300 transition group">
-              <input type="file" accept=".pdf,.docx" className="hidden" onChange={handleFileUpload} />
-              <i className="fas fa-cloud-upload-alt text-4xl text-slate-400 group-hover:text-indigo-500 mb-4 transition"></i>
-              <p className="font-bold text-slate-700 group-hover:text-indigo-700">Dosya Seç veya Sürükle</p>
-              <p className="text-xs text-slate-400 mt-1">PDF veya Word (.docx)</p>
-            </label>
+          <div className="max-w-4xl mx-auto mb-8">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6">
+              <label className="block font-bold text-slate-700 mb-2">Soruları Buraya Yapıştırın</label>
+              <textarea
+                className="w-full h-64 p-4 border rounded-xl font-mono text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder={`1. Soru metni buraya gelecek...\nA) Seçenek 1\nB) Seçenek 2\nC) Seçenek 3\nD) Seçenek 4\nCevap: A\n\n2. İkinci soru...`}
+                value={quizText}
+                onChange={(e) => setQuizText(e.target.value)}
+              ></textarea>
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={handleParseText}
+                  disabled={!quizText.trim() || isParsing}
+                  className={`px-6 py-2 rounded-lg font-bold text-white transition ${!quizText.trim() || isParsing ? 'bg-slate-300 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200'}`}
+                >
+                  {isParsing ? 'İşleniyor...' : 'Soruları Çözümle'}
+                </button>
+              </div>
+            </div>
           </div>
 
           {isParsing && (
@@ -1067,11 +1049,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </div>
           )}
 
-          {!isParsing && quizFile && parsedQuestions.length === 0 && (
+          {!isParsing && quizText && parsedQuestions.length === 0 && (
             <div className="text-center py-8 bg-red-50 rounded-xl border border-red-100 text-red-600">
               <i className="fas fa-exclamation-circle text-2xl mb-2"></i>
               <p className="font-bold">Soru Bulunamadı</p>
-              <p className="text-sm mt-1">Lütfen dosya formatının "1. Soru... A) ... B) ..." şeklinde olduğundan emin olun.</p>
+              <p className="text-sm mt-1">Lütfen formatın "1. Soru... A) ... Cevap: ..." şeklinde olduğundan emin olun.</p>
             </div>
           )}
         </div>
