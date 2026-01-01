@@ -9,9 +9,14 @@ interface WordListProps {
 const WordList: React.FC<WordListProps> = ({ notebookId }) => {
     const [words, setWords] = useState<VocabWord[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // Form State
+    const [targetLang, setTargetLang] = useState<'en' | 'de' | 'fr'>('en');
     const [newTerm, setNewTerm] = useState('');
     const [newDef, setNewDef] = useState('');
-    const [suggestions, setSuggestions] = useState<string[]>([]); // Store multiple meanings
+
+    // Smart Suggestions State
+    const [suggestions, setSuggestions] = useState<{ text: string, lang: string, from?: string, direction?: string }[]>([]);
     const [isTranslating, setIsTranslating] = useState(false);
 
     // Editing State
@@ -30,7 +35,15 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
         setLoading(false);
     };
 
-    // Auto-translate debounce for NEW words
+    // Flag Map
+    const flags: Record<string, string> = {
+        en: '🇬🇧',
+        de: '🇩🇪',
+        fr: '🇫🇷',
+        tr: '🇹🇷'
+    };
+
+    // Auto-translate Bidirectional
     useEffect(() => {
         const translate = async () => {
             if (!newTerm || newTerm.length < 2) {
@@ -40,34 +53,59 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
 
             setIsTranslating(true);
             try {
-                const response = await fetch(`https://api.mymemory.translated.net/get?q=${newTerm}&langpair=en|tr`);
-                const data = await response.json();
+                // Parallel Query: Foreign->TR AND TR->Foreign
+                const [resForeignToTr, resTrToForeign] = await Promise.all([
+                    fetch(`https://api.mymemory.translated.net/get?q=${newTerm}&langpair=${targetLang}|tr`),
+                    fetch(`https://api.mymemory.translated.net/get?q=${newTerm}&langpair=tr|${targetLang}`)
+                ]);
 
-                // Parse Matches for Richer Suggestions
-                const matches = data.matches || [];
-                const distinctDefs = new Set<string>();
+                const data1 = await resForeignToTr.json();
+                const data2 = await resTrToForeign.json();
 
-                // Add main translation first
-                if (data.responseData.translatedText) {
-                    distinctDefs.add(data.responseData.translatedText);
-                }
+                const distinctResults = new Map<string, { text: string, lang: string, direction: string }>();
 
-                // Add other high quality matches
-                matches.forEach((m: any) => {
-                    if (m.translation && !m.translation.toLowerCase().includes(newTerm.toLowerCase())) {
-                        distinctDefs.add(m.translation);
+                // Helper to process matches
+                const processMatches = (data: any, sourceLang: string, destLang: string) => {
+                    const matches = data.matches || [];
+
+                    // Add main match
+                    if (data.responseData.translatedText &&
+                        !data.responseData.translatedText.toLowerCase().includes("invalid key") &&
+                        data.responseData.translatedText.toLowerCase() !== newTerm.toLowerCase()) {
+
+                        const val = data.responseData.translatedText;
+                        distinctResults.set(val, {
+                            text: val,
+                            lang: destLang,
+                            direction: `${flags[sourceLang]}➜${flags[destLang]}`
+                        });
                     }
-                });
 
-                const finalList = Array.from(distinctDefs).slice(0, 5); // Limit to 5
+                    // Add other matches
+                    matches.forEach((m: any) => {
+                        if (m.translation &&
+                            m.translation.toLowerCase() !== newTerm.toLowerCase()) {
+                            distinctResults.set(m.translation, {
+                                text: m.translation,
+                                lang: destLang,
+                                direction: `${flags[sourceLang]}➜${flags[destLang]}`
+                            });
+                        }
+                    });
+                };
+
+                // Process Foreign -> TR
+                processMatches(data1, targetLang, 'tr');
+
+                // Process TR -> Foreign
+                processMatches(data2, 'tr', targetLang);
+
+                const finalList = Array.from(distinctResults.values()).slice(0, 8);
                 setSuggestions(finalList);
 
-                // Auto-fill first only if empty (Quality of Life)
+                // Auto-fill logic
                 if (finalList.length > 0 && !newDef) {
-                    // Optionally don't auto-fill, just show suggestions to force choice?
-                    // User asked for "see multiple meanings".
-                    // Let's auto-fill the best one but show others.
-                    setNewDef(finalList[0]);
+                    setNewDef(finalList[0].text);
                 }
 
             } catch (e) {
@@ -77,9 +115,9 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
             }
         };
 
-        const timer = setTimeout(translate, 800); // 800ms debounce
+        const timer = setTimeout(translate, 600); // 600ms debounce
         return () => clearTimeout(timer);
-    }, [newTerm]);
+    }, [newTerm, targetLang]);
 
     const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -118,7 +156,14 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
     const speak = (text: string) => {
         if ('speechSynthesis' in window) {
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'en-US';
+            // Detect lang roughly
+            let lang = 'en-US';
+            if (targetLang === 'de' && /[a-zA-Z]/.test(text)) lang = 'de-DE';
+            else if (targetLang === 'fr' && /[a-zA-Z]/.test(text)) lang = 'fr-FR';
+            else if (targetLang === 'en' && /[a-zA-Z]/.test(text)) lang = 'en-US';
+            else lang = 'tr-TR';
+
+            utterance.lang = lang;
             window.speechSynthesis.speak(utterance);
         } else {
             alert("Tarayıcınız seslendirmeyi desteklemiyor.");
@@ -127,15 +172,46 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
 
     return (
         <div className="space-y-6">
+
+            {/* Language Tabs */}
+            <div className="flex gap-2 justify-center pb-2">
+                {[
+                    { code: 'en', label: 'İngilizce', flag: '🇬🇧' },
+                    { code: 'de', label: 'Almanca', flag: '🇩🇪' },
+                    { code: 'fr', label: 'Fransızca', flag: '🇫🇷' }
+                ].map((lang) => (
+                    <button
+                        key={lang.code}
+                        type="button"
+                        onClick={() => {
+                            setTargetLang(lang.code as any);
+                            setSuggestions([]);
+                        }}
+                        className={`flex items-center gap-2 px-6 py-2 rounded-full transition-all text-sm font-bold ${targetLang === lang.code
+                                ? 'bg-blue-600 text-white shadow-lg scale-105'
+                                : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
+                            }`}
+                    >
+                        <span className="text-lg">{lang.flag}</span>
+                        {lang.label}
+                    </button>
+                ))}
+            </div>
+
             {/* Add Form - UX Enhanced */}
-            <form onSubmit={handleAdd} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col gap-4 relative">
-                <h3 className="text-sm font-bold text-slate-400 uppercase mb-2">Yeni Kelime Ekle</h3>
+            <form onSubmit={handleAdd} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col gap-4 relative transition-all">
+                <h3 className="text-sm font-bold text-slate-400 uppercase mb-2 flex items-center justify-between">
+                    <span>Yeni Kelime Ekle</span>
+                    <span className="text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded">
+                        {targetLang.toUpperCase()} ↔ TR Modu Aktif
+                    </span>
+                </h3>
 
                 <div className="flex flex-col md:flex-row gap-4">
                     <div className="flex-1 relative">
                         <input
                             type="text"
-                            placeholder="İngilizce kelime (örn: run)"
+                            placeholder={`Kelime yazın (${flags[targetLang]} veya 🇹🇷)...`}
                             className="w-full p-4 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg font-bold text-slate-700 bg-slate-50 focus:bg-white transition"
                             value={newTerm}
                             onChange={e => setNewTerm(e.target.value)}
@@ -150,7 +226,7 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
                     <div className="flex-1 flex flex-col gap-2">
                         <input
                             type="text"
-                            placeholder="Türkçe karşılığı"
+                            placeholder="Çevirisi..."
                             className="w-full p-4 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg text-slate-700 bg-slate-50 focus:bg-white transition"
                             value={newDef}
                             onChange={e => setNewDef(e.target.value)}
@@ -166,17 +242,21 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
                 {suggestions.length > 0 && (
                     <div className="animate-fade-in mt-2 p-3 bg-blue-50 rounded-lg border border-blue-100">
                         <p className="text-xs text-blue-500 font-bold mb-2 flex items-center gap-2">
-                            <i className="fas fa-magic"></i> Önerilen Anlamlar:
+                            <i className="fas fa-magic"></i> Akıllı Öneriler:
                         </p>
                         <div className="flex flex-wrap gap-2">
                             {suggestions.map((s, idx) => (
                                 <button
                                     key={idx}
                                     type="button"
-                                    onClick={() => setNewDef(s)}
-                                    className={`px-3 py-1 rounded-full text-sm transition border ${newDef === s ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400 hover:text-blue-600'}`}
+                                    onClick={() => setNewDef(s.text)}
+                                    className={`px-3 py-1 rounded-lg text-sm transition border flex items-center gap-2 group ${newDef === s.text
+                                            ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                                            : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400 hover:text-blue-600'
+                                        }`}
                                 >
-                                    {s}
+                                    <span className="opacity-50 text-xs font-mono group-hover:opacity-100">{s.direction}</span>
+                                    <span className="font-medium">{s.text}</span>
                                 </button>
                             ))}
                         </div>
@@ -200,13 +280,13 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
                                         className="flex-1 p-2 border rounded border-blue-300 outline-none font-bold"
                                         value={editTerm}
                                         onChange={e => setEditTerm(e.target.value)}
-                                        placeholder="İngilizce"
+                                        placeholder="Terim"
                                     />
                                     <input
                                         className="flex-1 p-2 border rounded border-blue-300 outline-none"
                                         value={editDef}
                                         onChange={e => setEditDef(e.target.value)}
-                                        placeholder="Türkçe"
+                                        placeholder="Tanım"
                                     />
                                     <div className="flex gap-2">
                                         <button onClick={handleUpdate} className="bg-green-600 text-white px-3 py-2 rounded font-bold text-sm hover:bg-green-700">
