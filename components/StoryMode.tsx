@@ -9,140 +9,139 @@ import { TranslationService } from '../services/translation';
 
 // Sub-component for Interactive Sentence
 const InteractiveSentence: React.FC<{
-    const InteractiveSentence: React.FC<{
-        text: string;
-        sourceLang: string;
-        onWordClick: (word: string, x: number, y: number) => void;
-        words: VocabWord[];
-        viewLang: string;
-        speak: (text: string) => void;
-        autoRead?: boolean;
-    }> = ({ text, sourceLang, onWordClick, words, viewLang, speak, autoRead }) => {
-    const[translation, setTranslation] = useState<string | null>(null);
-    const[loading, setLoading] = useState(false);
+    text: string;
+    sourceLang: string;
+    onWordClick: (word: string, x: number, y: number) => void;
+    words: VocabWord[];
+    viewLang: string;
+    speak: (text: string) => void;
+    autoRead?: boolean;
+}> = ({ text, sourceLang, onWordClick, words, viewLang, speak, autoRead }) => {
+    const [translation, setTranslation] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
 
     const handleTranslate = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+        e.stopPropagation();
 
-    if (autoRead) {
-    speak(text);
-    }
-    if (translation) {
-    setTranslation(null);
-    return;
-    }
-    setLoading(true);
-    try {
-    // Use TranslationService
-    let src = sourceLang === 'tr'?'tr': sourceLang;
-    const translated = await TranslationService.translate(text, 'tr', src);
-    setTranslation(translated);
-    } catch (err) {
-    console.error(err);
-    } finally {
-    setLoading(false);
-    }
+        if (autoRead) {
+            speak(text);
+        }
+        if (translation) {
+            setTranslation(null);
+            return;
+        }
+        setLoading(true);
+        try {
+            // Use TranslationService
+            let src = sourceLang === 'tr' ? 'tr' : sourceLang;
+            const translated = await TranslationService.translate(text, 'tr', src);
+            setTranslation(translated);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Improved Match Logic with Suffix Support
     const findMatch = (rawToken: string) => {
-    const clean = rawToken.replace(/[., !?;: () "']/g, '').trim();
-    if (!clean) return null;
+        const clean = rawToken.replace(/[., !?;: () "']/g, '').trim();
+        if (!clean) return null;
 
-    const lower = clean.toLocaleLowerCase('tr-TR');
-    const enLower = clean.toLowerCase();
+        const lower = clean.toLocaleLowerCase('tr-TR');
+        const enLower = clean.toLowerCase();
 
-    // 1. Exact Match
-    let match = words.find(w => w.term.toLowerCase() === lower || w.term.toLowerCase() === enLower);
-    if (match) return match;
+        // 1. Exact Match
+        let match = words.find(w => w.term.toLowerCase() === lower || w.term.toLowerCase() === enLower);
+        if (match) return match;
 
-    // 2. English Suffix Check (Simple)
-    match = words.find(w => {
-    const term = w.term.toLowerCase();
-    if (enLower === term + 's') return true;
-    if (enLower === term + 'es') return true;
-    if (enLower === term + 'd') return true;
-    if (enLower === term + 'ed') return true;
-    if (enLower === term + 'ing') return true;
-    if (enLower === term + 'ly') return true;
-    return false;
-    });
+        // 2. English Suffix Check (Simple)
+        match = words.find(w => {
+            const term = w.term.toLowerCase();
+            if (enLower === term + 's') return true;
+            if (enLower === term + 'es') return true;
+            if (enLower === term + 'd') return true;
+            if (enLower === term + 'ed') return true;
+            if (enLower === term + 'ing') return true;
+            if (enLower === term + 'ly') return true;
+            return false;
+        });
 
-    return match;
+        return match;
     };
 
     const renderTokens = () => {
-    const tokens = text.split(/(\s+|[., !?;]) /);
-    return tokens.map((token, i) => {
-    // Only search for matches if we are in Original mode or if words match the current view lang?
-    // For now search always.
-    const match = findMatch(token);
+        const tokens = text.split(/(\s+|[., !?;]) /);
+        return tokens.map((token, i) => {
+            // Only search for matches if we are in Original mode or if words match the current view lang?
+            // For now search always.
+            const match = findMatch(token);
 
-    if (match) {
-    return (
-    <span
-    key = {i}
-    className = "text-blue-600 font-bold cursor-pointer hover:bg-blue-100 rounded px-0.5 transition relative group"
-    onClick = {(e) => { e.stopPropagation(); speak(match.term); }}
-    >
-    {token}
-    <span className = "absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10 transition shadow-lg">
-    {match.definition}
-    </span>
-    </span>
-    );
-    }
-    // Make non-matched words clickable for popover
-    if (token.trim() && !/^[., !?;: () "'\s]+$/.test(token)) {
-    return (
-    <span
-    key = {i}
-    className = "hover:text-blue-500 hover:bg-yellow-100 transition cursor-pointer select-none"
-    onClick = {(e) => {
-    e.stopPropagation();
-    onWordClick(token.replace(/[., !?;: () "']/g, ''), e.clientX, e.clientY);
-    }}
-    >
-    {token}
-    </span>
-    );
-    }
-    return <span key = {i} className = "text-slate-700">{token.replace(/\n/g, '') }</span>;
-    });
+            if (match) {
+                return (
+                    <span
+                        key={i}
+                        className="text-blue-600 font-bold cursor-pointer hover:bg-blue-100 rounded px-0.5 transition relative group"
+                        onClick={(e) => { e.stopPropagation(); speak(match.term); }}
+                    >
+                        {token}
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10 transition shadow-lg">
+                            {match.definition}
+                        </span>
+                    </span>
+                );
+            }
+            // Make non-matched words clickable for popover
+            if (token.trim() && !/^[., !?;: () "'\s]+$/.test(token)) {
+                return (
+                    <span
+                        key={i}
+                        className="hover:text-blue-500 hover:bg-yellow-100 transition cursor-pointer select-none"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onWordClick(token.replace(/[., !?;: () "']/g, ''), e.clientX, e.clientY);
+                        }}
+                    >
+                        {token}
+                    </span>
+                );
+            }
+            return <span key={i} className="text-slate-700">{token.replace(/\n/g, '')}</span>;
+        });
     };
 
     return (
-    <span
-    className = "hover:bg-yellow-50/50 rounded transition duration-300 relative inline"
-    onClick = {handleTranslate} // Keep fallback sentence click
-    >
-    {renderTokens() }
+        <span
+            className="hover:bg-yellow-50/50 rounded transition duration-300 relative inline"
+            onClick={handleTranslate} // Keep fallback sentence click
+        >
+            {renderTokens()}
 
-    {/* Explicit Translation Trigger Icon */}
-    <span
-    className = "inline-flex items-center justify-center w-10 h-10 ml-2 bg-indigo-600 text-white rounded-full cursor-pointer hover:bg-indigo-700 transition shadow-lg z-20 select-none active:scale-95"
-    style = {{ verticalAlign: 'middle', display: 'inline-flex' }}
-    onClick = {(e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    handleTranslate(e);
-    }}
-    title = "Bu cümleyi çevir"
-    >
-    <span className = "text-sm font-bold">
-    {sourceLang === 'tr'?'EN': 'TR'}
-    </span>
-    </span>
+            {/* Explicit Translation Trigger Icon */}
+            <span
+                className="inline-flex items-center justify-center w-10 h-10 ml-2 bg-indigo-600 text-white rounded-full cursor-pointer hover:bg-indigo-700 transition shadow-lg z-20 select-none active:scale-95"
+                style={{ verticalAlign: 'middle', display: 'inline-flex' }}
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleTranslate(e);
+                }}
+                title="Bu cümleyi çevir"
+            >
+                <span className="text-sm font-bold">
+                    {sourceLang === 'tr' ? 'EN' : 'TR'}
+                </span>
+            </span>
 
-    {(translation || loading) && (
-    <span className = "block my-2 p-3 bg-indigo-50 text-indigo-800 text-lg font-sans rounded-r-xl border-l-4 border-indigo-500 animate-scale-in select-text cursor-auto shadow-sm" onClick = {e => e.stopPropagation() }>
-    {loading?<i className = "fas fa-spinner fa-spin text-indigo-400"></i>: <><i className = "fas fa-language mr-2 text-indigo-400"></i> {translation}</>}
-    </span>
-    ) }
-    {" "}
-    </span>
+            {(translation || loading) && (
+                <span className="block my-2 p-3 bg-indigo-50 text-indigo-800 text-lg font-sans rounded-r-xl border-l-4 border-indigo-500 animate-scale-in select-text cursor-auto shadow-sm" onClick={e => e.stopPropagation()}>
+                    {loading ? <i className="fas fa-spinner fa-spin text-indigo-400"></i> : <><i className="fas fa-language mr-2 text-indigo-400"></i> {translation}</>}
+                </span>
+            )}
+            {" "}
+        </span>
     );
-    };
+};
 
 interface StoryModeProps {
     notebookId: string;
