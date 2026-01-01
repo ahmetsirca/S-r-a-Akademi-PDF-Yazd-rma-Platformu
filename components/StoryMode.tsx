@@ -122,9 +122,9 @@ const InteractiveSentence: React.FC<{
         >
             {renderTokens()}
 
-            {/* Explicit Translation Trigger Icon - Mobile Friendly Target - DESKTOP FIX */}
+            {/* Explicit Translation Trigger Icon - Mobile Friendly Target - OPTIMIZED */}
             <span
-                className="inline-flex items-center justify-center w-8 h-8 ml-2 bg-indigo-600 text-white rounded-full cursor-pointer hover:bg-indigo-700 transition shadow-md z-20 select-none"
+                className="inline-flex items-center justify-center w-10 h-10 ml-2 bg-indigo-600 text-white rounded-full cursor-pointer hover:bg-indigo-700 transition shadow-lg z-20 select-none active:scale-95"
                 style={{ verticalAlign: 'middle', display: 'inline-flex' }}
                 onClick={(e) => {
                     e.preventDefault();

@@ -37,11 +37,34 @@ export class ErrorBoundary extends Component<Props, State> {
                     <div className="bg-white p-4 rounded border border-slate-200 text-left text-xs text-red-500 font-mono mb-6 w-full max-w-md overflow-auto max-h-32">
                         {this.state.error?.toString()}
                     </div>
+                    <div className="flex gap-2 flex-wrap justify-center">
+                        <button
+                            onClick={() => window.location.reload()}
+                            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700 shadow transition"
+                        >
+                            Sayfayı Yenile
+                        </button>
+                        <button
+                            onClick={() => {
+                                navigator.clipboard.writeText(this.state.error?.toString() || "Bilinmeyen Hata");
+                                alert("Hata metni kopyalandı!");
+                            }}
+                            className="bg-slate-200 text-slate-700 px-6 py-3 rounded-lg font-bold hover:bg-slate-300 transition"
+                        >
+                            <i className="fas fa-copy mr-2"></i> Hatayı Kopyala
+                        </button>
+                    </div>
+
                     <button
-                        onClick={() => window.location.reload()}
-                        className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition"
+                        onClick={() => {
+                            if (confirm("Uygulama verileri temizlenip sıfırlanacak. Emin misiniz?")) {
+                                localStorage.clear();
+                                window.location.reload();
+                            }
+                        }}
+                        className="mt-8 text-red-500 text-sm hover:text-red-700 underline"
                     >
-                        Sayfayı Yenile
+                        Sorun devam ederse: Uygulamayı Sıfırla
                     </button>
                 </div>
             );
