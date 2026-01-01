@@ -41,8 +41,6 @@ const InteractiveSentence: React.FC<{
         } catch (err) {
             console.error(err);
         } finally {
-            console.error(err);
-        } finally {
             setLoading(false);
         }
     };
@@ -234,22 +232,20 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
 
             setIsTranslatingStory(true);
             try {
-                try {
-                    // Use robust TranslationService
-                    const translated = await TranslationService.translateFullText(content, viewLang);
-                    setTranslatedContent(translated);
-                } catch (e) {
-                    console.error("Story translation error", e);
-                    setTranslatedContent("Çeviri servisi şu an meşgul, lütfen daha sonra tekrar deneyiniz.");
-                } finally {
-                    setIsTranslatingStory(false);
-                }
-            };
+                // Use robust TranslationService
+                const translated = await TranslationService.translateFullText(content, viewLang);
+                setTranslatedContent(translated);
+            } catch (e) {
+                console.error("Story translation error", e);
+                setTranslatedContent("Çeviri servisi şu an meşgul, lütfen daha sonra tekrar deneyiniz.");
+            } finally {
+                setIsTranslatingStory(false);
+            }
+        };
 
-            // Debounce or just run?
-            fetchTranslation();
+        fetchTranslation();
 
-        }, [viewLang, content]); // Trigger when Lang OR Content changes
+    }, [viewLang, content]); // Trigger when Lang OR Content changes
 
     const loadNotebooks = async () => {
         const { data: { user } } = await supabase.auth.getUser();
