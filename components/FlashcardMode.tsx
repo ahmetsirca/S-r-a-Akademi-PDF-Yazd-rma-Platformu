@@ -100,8 +100,8 @@ const FlashcardMode: React.FC<FlashcardModeProps> = ({ notebookId }) => {
                         key={lang.code}
                         onClick={() => setTargetLang(lang.code as any)}
                         className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all text-xs font-bold ${targetLang === lang.code
-                                ? 'bg-indigo-600 text-white shadow-md'
-                                : 'text-slate-500 hover:bg-slate-50'
+                            ? 'bg-indigo-600 text-white shadow-md'
+                            : 'text-slate-500 hover:bg-slate-50'
                             }`}
                     >
                         <span className="">{lang.flag}</span>
@@ -123,6 +123,7 @@ const FlashcardMode: React.FC<FlashcardModeProps> = ({ notebookId }) => {
                         KART {currentIndex + 1} / {filteredWords.length}
                     </div>
 
+
                     {/* CARD */}
                     <div
                         onClick={() => setIsFlipped(!isFlipped)}
@@ -135,7 +136,9 @@ const FlashcardMode: React.FC<FlashcardModeProps> = ({ notebookId }) => {
 
                             <div className="flex items-center gap-3 justify-center w-full">
                                 <p className={`text-4xl md:text-5xl font-black break-words max-w-full leading-tight text-center ${isFlipped ? 'text-green-600' : 'text-slate-800'}`}>
-                                    {isFlipped ? currentWord.definition : currentWord.term}
+                                    {isFlipped
+                                        ? (currentWord.definition || "Çeviri yok...")
+                                        : currentWord.term}
                                 </p>
                                 {!isFlipped && (
                                     <button
@@ -156,6 +159,16 @@ const FlashcardMode: React.FC<FlashcardModeProps> = ({ notebookId }) => {
                             </p>
                         </div>
                     </div>
+
+                    {/* Auto-Translate Hook Logic (Hidden but active) */}
+                    <AutoTranslateEffect
+                        word={currentWord}
+                        targetLang={targetLang}
+                        onUpdate={(id, def) => {
+                            // Update local state if translation found
+                            setAllWords(prev => prev.map(w => w.id === id ? { ...w, definition: def } : w));
+                        }}
+                    />
 
                     {/* CONTROLS */}
                     <div className="flex justify-between gap-4">
@@ -178,6 +191,26 @@ const FlashcardMode: React.FC<FlashcardModeProps> = ({ notebookId }) => {
             )}
         </div>
     );
+};
+
+// Sub-component to handle side-effect of translation without cluttering main render
+// Import TranslationService needed at top of file
+import { TranslationService } from '../services/translation';
+
+const AutoTranslateEffect = ({ word, targetLang, onUpdate }: { word: VocabWord, targetLang: string, onUpdate: (id: string, def: string) => void }) => {
+    useEffect(() => {
+        if (word && !word.definition && word.term) {
+            console.log("Auto-translating missing definition for:", word.term);
+            TranslationService.translate(word.term, 'tr', targetLang)
+                .then(res => {
+                    if (res && !res.startsWith('[Hata')) {
+                        onUpdate(word.id, res);
+                        // Optionally save to DB here if desired, but local update shows it instantly
+                    }
+                });
+        }
+    }, [word, targetLang]);
+    return null;
 };
 
 export default FlashcardMode;

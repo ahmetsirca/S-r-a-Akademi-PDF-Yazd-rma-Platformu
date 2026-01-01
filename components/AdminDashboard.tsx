@@ -145,7 +145,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         permCanPrint,
         permExpiresAt ? new Date(permExpiresAt).toISOString() : null,
         permPrintLimits
-      ));
+      )) as any;
 
       if (error) {
         console.error("Supabase Update Error:", error);

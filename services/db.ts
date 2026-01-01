@@ -50,13 +50,13 @@ export const DBService = {
       can_print: canPrint,
       print_limits: printLimits,
       expires_at: expiresAt
-    }, { onConflict: 'user_id' }).select();
+    }, { onConflict: 'user_id' }).select().single();
 
     if (error) {
       console.error("Error updating permissions:", error);
-      return null;
+      return { data: null, error };
     }
-    return data;
+    return { data, error: null };
   },
 
   async decrementPrintLimit(userId: string, fileId: string) {
