@@ -25,6 +25,10 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
     const [editTerm, setEditTerm] = useState('');
     const [editDef, setEditDef] = useState('');
 
+    // UX States
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
+
     useEffect(() => {
         loadWords();
     }, [notebookId]);
@@ -97,13 +101,24 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
 
     const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newTerm || !newDef) return;
-        const res = await DBService.addNotebookWord(notebookId, newTerm, newDef, targetLang);
-        if (res) {
-            setWords([res, ...words]);
-            setNewTerm('');
-            setNewDef('');
-            setSuggestions([]);
+        if (!newTerm || !newDef || isSubmitting) return;
+
+        setIsSubmitting(true);
+        try {
+            const res = await DBService.addNotebookWord(notebookId, newTerm, newDef, targetLang);
+            if (res) {
+                setWords([res, ...words]);
+                setNewTerm('');
+                setNewDef('');
+                setSuggestions([]);
+                setSuccessMessage('Eklendi! 🎉');
+                setTimeout(() => setSuccessMessage(''), 2000);
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Kelime eklenirken hata oluştu.");
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -217,9 +232,25 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
                         />
                     </div>
 
-                    <button className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg hover:shadow-blue-500/30 active:scale-95">
-                        <i className="fas fa-plus mr-2"></i> Ekle
-                    </button>
+                    <div className="flex flex-col gap-2">
+                        <button
+                            disabled={isSubmitting}
+                            className={`h-full min-h-[56px] px-8 rounded-xl font-bold transition shadow-lg flex items-center justify-center gap-2 ${isSubmitting
+                                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                    : successMessage
+                                        ? 'bg-green-500 text-white shadow-green-500/30'
+                                        : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-blue-500/30 active:scale-95'
+                                }`}
+                        >
+                            {isSubmitting ? (
+                                <><i className="fas fa-circle-notch fa-spin"></i> Ekleniyor...</>
+                            ) : successMessage ? (
+                                <><i className="fas fa-check"></i> {successMessage}</>
+                            ) : (
+                                <><i className="fas fa-plus"></i> Ekle</>
+                            )}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Smart Suggestions Chips */}
