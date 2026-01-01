@@ -106,6 +106,7 @@ export interface VocabWord {
   notebookId: string;
   term: string;
   definition: string;
+  language?: 'en' | 'de' | 'fr' | 'tr'; // NEW
   createdAt: string;
 }
 

@@ -6,15 +6,15 @@ import { jsPDF } from 'jspdf';
 import { Document, Packer, Paragraph, HeadingLevel } from 'docx';
 import { saveAs } from 'file-saver';
 
-// Sub-component for Interactive Sentence (Moved to top or bottom, fine at top for usage)
 // Sub-component for Interactive Sentence
 const InteractiveSentence: React.FC<{
     text: string,
     words: VocabWord[],
     speak: (t: string) => void,
     autoRead: boolean,
-    onWordClick: (text: string, x: number, y: number) => void // New Prop
-}> = ({ text, words, speak, autoRead, onWordClick }) => {
+    onWordClick: (text: string, x: number, y: number) => void,
+    sourceLang?: string
+}> = ({ text, words, speak, autoRead, onWordClick, sourceLang = 'en' }) => {
     const [translation, setTranslation] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
@@ -32,7 +32,15 @@ const InteractiveSentence: React.FC<{
         }
         setLoading(true);
         try {
-            const res = await fetch(`https://api.mymemory.translated.net/get?q=${text.replace(/[.!?]/g, '')}&langpair=en|tr`);
+            // Translate from sourceLang (or auto) to TR
+            // If source is TR, maybe translate to EN? 
+            // User request implies "Show me Turkish translation" mostly.
+            // But if text is TR, user likely wants EN?
+            // Let's assume standard behavior: Translate to TR unless source is TR, then EN.
+            let pair = `${sourceLang}|tr`;
+            if (sourceLang === 'tr') pair = 'tr|en';
+
+            const res = await fetch(`https://api.mymemory.translated.net/get?q=${text.replace(/[.!?]/g, '')}&langpair=${pair}`);
             const data = await res.json();
             if (data.responseData.translatedText) {
                 setTranslation(data.responseData.translatedText);
@@ -56,7 +64,7 @@ const InteractiveSentence: React.FC<{
         let match = words.find(w => w.term.toLowerCase() === lower || w.term.toLowerCase() === enLower);
         if (match) return match;
 
-        // 2. English Suffix Check
+        // 2. English Suffix Check (Simple)
         match = words.find(w => {
             const term = w.term.toLowerCase();
             if (enLower === term + 's') return true;
@@ -65,10 +73,6 @@ const InteractiveSentence: React.FC<{
             if (enLower === term + 'ed') return true;
             if (enLower === term + 'ing') return true;
             if (enLower === term + 'ly') return true;
-            if (enLower === term + 'ies') return true;
-            if (enLower.endsWith('ies') && term.endsWith('y')) {
-                if (enLower.slice(0, -3) === term.slice(0, -1)) return true;
-            }
             return false;
         });
 
@@ -78,6 +82,8 @@ const InteractiveSentence: React.FC<{
     const renderTokens = () => {
         const tokens = text.split(/(\s+|[.,!?;])/);
         return tokens.map((token, i) => {
+            // Only search for matches if we are in Original mode or if words match the current view lang?
+            // For now search always.
             const match = findMatch(token);
 
             if (match) {
@@ -95,7 +101,6 @@ const InteractiveSentence: React.FC<{
                 );
             }
             // Make non-matched words clickable for popover
-            // Only make "word-like" tokens clickable
             if (token.trim() && !/^[.,!?;:()"'\s]+$/.test(token)) {
                 return (
                     <span
@@ -103,7 +108,6 @@ const InteractiveSentence: React.FC<{
                         className="hover:text-blue-500 hover:bg-yellow-100 transition cursor-pointer select-none"
                         onClick={(e) => {
                             e.stopPropagation();
-                            // Use e.clientX/Y for fixed calculation in StoryMode proper
                             onWordClick(token.replace(/[.,!?;:()"']/g, ''), e.clientX, e.clientY);
                         }}
                     >
@@ -122,18 +126,20 @@ const InteractiveSentence: React.FC<{
         >
             {renderTokens()}
 
-            {/* Explicit Translation Trigger Icon - Mobile Friendly Target - OPTIMIZED */}
+            {/* Explicit Translation Trigger Icon */}
             <span
                 className="inline-flex items-center justify-center w-10 h-10 ml-2 bg-indigo-600 text-white rounded-full cursor-pointer hover:bg-indigo-700 transition shadow-lg z-20 select-none active:scale-95"
                 style={{ verticalAlign: 'middle', display: 'inline-flex' }}
                 onClick={(e) => {
                     e.preventDefault();
-                    e.stopPropagation(); // Prevent double trigger
+                    e.stopPropagation();
                     handleTranslate(e);
                 }}
                 title="Bu cümleyi çevir"
             >
-                <span className="text-sm font-bold">TR</span>
+                <span className="text-sm font-bold">
+                    {sourceLang === 'tr' ? 'EN' : 'TR'}
+                </span>
             </span>
 
             {(translation || loading) && (
@@ -156,6 +162,11 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
+
+    // Viewer Language State
+    const [viewLang, setViewLang] = useState<'original' | 'en' | 'de' | 'fr' | 'tr'>('original');
+    const [translatedContent, setTranslatedContent] = useState<string | null>(null);
+    const [isTranslatingStory, setIsTranslatingStory] = useState(false);
 
     // Selection Popover State
     const [popover, setPopover] = useState<{ x: number, y: number, text: string } | null>(null);
@@ -182,12 +193,62 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
         loadNotebooks();
     }, [notebookId]);
 
+    // When changing view lang, translate full story
+    useEffect(() => {
+        const fetchTranslation = async () => {
+            if (viewLang === 'original') {
+                setTranslatedContent(null);
+                return;
+            }
+            if (!content) return;
+
+            setIsTranslatingStory(true);
+            try {
+                // Split logic roughly:
+                const cleanText = content.replace(/\n/g, ' ');
+                // Use a larger chunk size but for safety lets fetch sentence by sentence or blocks
+                // API MyMemory Limit: 500 chars/req strict.
+                // We need to chunk it.
+
+                const sentences = cleanText.match(/[^\.!\?]+[\.!\?]+|[^\.!\?]+$/g) || [cleanText];
+
+                // Batch requests
+                // Note: Heavy usage might hit limits.
+                const translatedSentences = await Promise.all(
+                    sentences.map(async (s) => {
+                        if (s.length < 2) return s;
+                        try {
+                            // Assume source is auto (or we guess 'tr' if user said "I write TR")
+                            // We translate TO matching viewLang
+                            const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(s)}&langpair=Autodetect|${viewLang}`);
+                            const json = await res.json();
+                            return json.responseData.translatedText || s;
+                        } catch (e) {
+                            return s;
+                        }
+                    })
+                );
+
+                setTranslatedContent(translatedSentences.join(' '));
+
+            } catch (e) {
+                console.error("Story translation error", e);
+            } finally {
+                setIsTranslatingStory(false);
+            }
+        };
+
+        // Debounce or just run?
+        fetchTranslation();
+
+    }, [viewLang]); // Only run when viewLang changes
+
     const loadNotebooks = async () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
             const nbs = await DBService.getNotebooks(user.id);
             setAllNotebooks(nbs);
-            setTargetNotebookId(notebookId); // Reset to current when notebook changes
+            setTargetNotebookId(notebookId);
         }
     };
 
@@ -216,73 +277,22 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             return;
         }
         let success = false;
-
-        console.log(`[StoryMode] Attempting save. NotebookID: ${notebookId}, Title: ${title}`);
-
-        if (!notebookId) {
-            alert("HATA: Defter ID bulunamadı (notebookId is null). Lütfen sayfayı yenileyip tekrar deneyin.");
-            return;
-        }
-
         try {
             if (editingId) {
-                console.log("Updating story...", editingId);
                 const res = await DBService.updateStory(editingId, title, content);
                 success = !!res;
             } else {
-                console.log("Creating new story...");
                 const res = await DBService.createStory(notebookId, title, content);
-
-                // Detailed Debug Check
-                if (!res) {
-                    throw new Error("DBService.createStory returned null without throwing. Check console or network tab.");
-                }
-                success = true;
+                success = !!res;
             }
 
             if (success) {
-                // Visual feedback
-                const btn = document.getElementById('save-btn');
-                const fullscreenBtn = document.getElementById('fullscreen-save-btn');
-
-                const showSuccess = (element: HTMLElement | null) => {
-                    if (element) {
-                        const originalText = element.innerText;
-                        element.innerText = 'Kaydedildi! ✓';
-                        const originalBg = element.style.backgroundColor;
-                        element.style.backgroundColor = '#16a34a';
-                        setTimeout(() => {
-                            element.innerText = originalText;
-                            element.style.backgroundColor = originalBg;
-                        }, 2000);
-                    }
-                };
-
-                showSuccess(btn);
-                showSuccess(fullscreenBtn);
-
-                if (!editingId) {
-                    // Only clear if not editing, OR if we want to reset after update?
-                    // User might want to keep editing after save.
-                    // Let's keep it for now but maybe change UX later.
-                    // Actually usually after save we want to keep editing the same doc.
-                }
-                setIsViewerEditing(false); // Exit edit mode after save
+                setIsViewerEditing(false);
+                setViewLang('original'); // Reset view on save
                 loadData();
             }
         } catch (e: any) {
-            console.error("Save Story Error Detail:", e);
-
-            // Analyze Error Message for common Supabase/Postgres codes
-            const msg = e.message || JSON.stringify(e);
-
-            if (msg.includes("row level security") || msg.includes("policy")) {
-                alert("İZİN HATASI: Veritabanı güvenlik politikası (RLS) yazmayı engelliyor.\n\nÇÖZÜM: 'repair_vocab_permissions.sql' dosyasını çalıştırın.");
-            } else if (msg.includes("foreign key constraint") || msg.includes("violates foreign key")) {
-                alert(`VERİ TUTARSIZLIĞI HATASI:\n\nBu hikayeyi eklemeye çalıştığınız Defter (ID: ${notebookId}) veritabanında bulunamadı.\n\nBu durum, defteri sildiyseniz veya senkronizasyon hatası olduysa yaşanır. Lütfen ana sayfaya dönüp tekrar deneyin.`);
-            } else {
-                alert(`TEKNİK HATA OLUŞTU:\n\nMesaj: ${msg}\n\nLütfen bu hatayı geliştiriciye iletin.`);
-            }
+            alert(`Hata: ${e.message}`);
         }
     };
 
@@ -290,7 +300,6 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
         setEditingId(story.id);
         setTitle(story.title);
         setContent(story.content);
-        // Scroll to editor on mobile (or open viewer if fullscreen logic was different, but here standard)
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -298,20 +307,44 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
         if (!confirm('Hikayeyi silmek istiyor musunuz?')) return;
         await DBService.deleteStory(id);
         setStories(stories.filter(s => s.id !== id));
-        if (editingId === id) {
-            setEditingId(null);
-            setTitle('');
-            setContent('');
-        }
     };
 
-    const speak = (text: string) => {
-        if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel(); // Stop previous
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'en-US';
-            utterance.rate = readingSpeed;
-            window.speechSynthesis.speak(utterance);
+    // Word Interaction
+    const handleMouseUp = () => {
+        // Logic moved to InteractiveSentence's onWordClick mostly, 
+        // but here we can keep selection logic for non-tokenized parts if needed.
+    };
+
+    const handleAddWord = async () => {
+        if (!popover) return;
+        // Add to vocab
+        // Source depends on viewLang!
+        // If viewLang is DE, we are adding a DE word.
+        const lang = viewLang === 'original' ? 'en' : viewLang; // Default to en if original?
+
+        await DBService.addNotebookWord(notebookId, popover.text, translation || '', lang);
+        setPopover(null);
+        setTranslation(null);
+        loadData();
+        alert("Kelime eklendi!");
+    };
+
+    const handleTranslateWord = async () => {
+        if (!popover) return;
+        setTranslation('Çevriliyor...');
+        try {
+            // Translate the clicked word from [CurrentLang] to TR
+            let src = viewLang === 'original' ? 'en' : viewLang;
+            if (viewLang === 'tr') src = 'tr'; // if viewing in TR, maybe translate to EN?
+            const pair = src === 'tr' ? 'tr|en' : `${src}|tr`;
+
+            const res = await fetch(`https://api.mymemory.translated.net/get?q=${popover.text}&langpair=${pair}`);
+            const data = await res.json();
+            if (data.responseData.translatedText) {
+                setTranslation(data.responseData.translatedText);
+            }
+        } catch (e) {
+            setTranslation('Hata.');
         }
     };
 
@@ -322,42 +355,29 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             return;
         }
 
-        if (!content) return;
+        const textToRead = translatedContent || content;
+        if (!textToRead) return;
 
+        const u = new SpeechSynthesisUtterance(textToRead);
+        u.rate = readingSpeed;
+
+        // Detect lang
+        if (viewLang === 'de') u.lang = 'de-DE';
+        else if (viewLang === 'fr') u.lang = 'fr-FR';
+        else if (viewLang === 'tr') u.lang = 'tr-TR';
+        else u.lang = 'en-US';
+
+        u.onend = () => setIsReadingStory(false);
+        synthesisRef.current = u;
+        window.speechSynthesis.speak(u);
         setIsReadingStory(true);
-        const utterance = new SpeechSynthesisUtterance(content);
-        utterance.lang = 'en-US';
-        utterance.rate = readingSpeed;
-        utterance.onend = () => setIsReadingStory(false);
-        utterance.onerror = () => setIsReadingStory(false);
-
-        synthesisRef.current = utterance;
-        window.speechSynthesis.speak(utterance);
     };
 
-    // Stop speaking when unmounting
-    useEffect(() => {
-        return () => {
-            window.speechSynthesis.cancel();
-        };
-    }, []);
-
-    // --- EXPORT FEATURES ---
     const exportPDF = () => {
         const doc = new jsPDF();
-
-        // Font setup (Basic, for serious Turkish support need custom font in jsPDF but default supports basics usually)
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(20);
-        doc.text(title || 'Adsız Hikaye', 105, 20, { align: 'center' });
-
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(12);
-
-        const splitText = doc.splitTextToSize(content, 170);
-        doc.text(splitText, 20, 40);
-
-        doc.save(`${title || 'hikaye'}.pdf`);
+        doc.text(title, 10, 10);
+        doc.text(content, 10, 20); // TODO: Wrap text
+        doc.save(`${title}.pdf`);
     };
 
     const exportWord = () => {
@@ -365,262 +385,87 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             sections: [{
                 properties: {},
                 children: [
-                    new Paragraph({
-                        text: title || 'Adsız Hikaye',
-                        heading: HeadingLevel.HEADING_1,
-                    }),
-                    new Paragraph({
-                        text: content,
-                        spacing: { before: 400 }
-                    }),
+                    new Paragraph({ text: title, heading: HeadingLevel.HEADING_1 }),
+                    new Paragraph({ text: content })
                 ],
             }],
         });
-
         Packer.toBlob(doc).then(blob => {
-            saveAs(blob, `${title || 'hikaye'}.docx`);
+            saveAs(blob, `${title}.docx`);
         });
     };
 
     const shareStory = (platform: string) => {
-        if (!editingId && !title) {
-            alert("Paylaşmak için önce bir hikaye seçin veya kaydedin.");
-            return;
+        const text = `Hikaye: ${title}\n\n${content}`;
+        const url = window.location.href;
+        if (platform === 'twitter') window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`);
+        if (platform === 'whatsapp') window.open(`https://wa.me/?text=${encodeURIComponent(text)}`);
+        if (platform === 'telegram') window.open(`https://t.me/share/url?url=${url}&text=${encodeURIComponent(text)}`);
+        if (platform === 'copy') {
+            navigator.clipboard.writeText(text);
+            alert("Kopyalandı!");
         }
-        // Use editingId if available, otherwise we can't share a new unsaved story.
-        // If editingId is null, user is writing a NEW story.
-        if (!editingId) {
-            alert("Lütfen önce hikayeyi kaydedin.");
-            return;
-        }
-
-        const shareText = `"${title}" - Sırça Akademi'de yazdığım hikayeyi oku!`;
-        const shareUrl = `${window.location.origin}/#/story/${editingId}`;
-
-        let url = '';
-        switch (platform) {
-            case 'twitter':
-                url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`;
-                break;
-            case 'whatsapp':
-                url = `https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`;
-                break;
-            case 'telegram':
-                url = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`;
-                break;
-            case 'copy':
-                navigator.clipboard.writeText(`${shareText} ${shareUrl}`);
-                alert("Link kopyalandı!");
-                return;
-        }
-
-        if (url) window.open(url, '_blank');
         setShowShareMenu(false);
     };
 
-
-    // Handle Text Selection (Disabled in Edit Mode)
-    const handleMouseUp = (e: React.MouseEvent) => {
-        if (isViewerEditing) return; // Retrieve normal text behavior when editing
-
-        e.stopPropagation(); // Prevent document click handler
-        const selection = window.getSelection();
-        if (!selection || selection.toString().trim().length === 0) {
-            return;
-        }
-
-        // Check if selection is inside viewer
-        if (viewerRef.current && viewerRef.current.contains(selection.anchorNode)) {
-            const range = selection.getRangeAt(0);
-            const rect = range.getBoundingClientRect();
-
-            setPopover({
-                x: rect.left + (rect.width / 2),
-                y: rect.top - 10,
-                text: selection.toString() // Standard coordinate, will be fixed by viewer
-            });
-            setTranslation(null);
-        }
-    };
-
-    const handleTranslateSelection = async (e: React.MouseEvent) => {
-        e.stopPropagation(); // Prevent closing
-        if (!popover) return;
-        try {
-            const res = await fetch(`https://api.mymemory.translated.net/get?q=${popover.text}&langpair=en|tr`);
-            const data = await res.json();
-            if (data.responseData.translatedText) {
-                setTranslation(data.responseData.translatedText);
-            }
-        } catch (err) {
-            setTranslation("Çeviri hatası");
-        }
-    };
-
-    const handleAddWord = async () => {
-        if (!popover || !notebookId) return;
-        const term = popover.text.trim();
-        if (!term) return;
-
-        // Auto translate for definition
-        let def = '...';
-        try {
-            const res = await fetch(`https://api.mymemory.translated.net/get?q=${term}&langpair=en|tr`);
-            const data = await res.json();
-            if (data.responseData.translatedText) {
-                def = data.responseData.translatedText;
-            }
-        } catch (e) {
-            console.error("Trans fail", e);
-        }
-
-        // Use targetNotebookId instead of prop
-        const res = await DBService.addNotebookWord(targetNotebookId, term, def);
-        if (res) {
-            // Optimistically update highlighting IF we added to the CURRENT notebook
-            if (targetNotebookId === notebookId) {
-                setWords(prev => [res, ...prev]);
-            }
-            setPopover(null);
-
-            // Show toast
-            const toast = document.createElement('div');
-            toast.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-50 animate-fade-in';
-            toast.innerText = `"${term}" eklendi!`;
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 2000);
-        }
-    };
-
-    // Helper to render interactive text
-    const renderInteractiveContent = (text: string) => {
-        const tokens = text.split(/(\s+|[.,!?;])/);
-        return tokens.map((token, i) => {
-            const cleanToken = token.replace(/[.,!?;]/g, '').toLowerCase().trim();
-            const match = words.find(w => w.term.toLowerCase() === cleanToken);
-
-            if (match) {
-                return (
-                    <span
-                        key={i}
-                        className="text-blue-600 font-bold cursor-pointer hover:bg-blue-100 rounded px-0.5 transition relative group"
-                        onClick={(e) => { e.stopPropagation(); speak(match.term); }}
-                    >
-                        {token}
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10 transition">
-                            {match.definition}
-                        </span>
-                    </span>
-                );
-            }
-            return <span key={i}>{token}</span>;
-        });
-    };
-
     return (
-        <div className={`grid md:grid-cols-2 gap-6 relative transition-all duration-300 ${isFullscreen ? 'fixed inset-0 z-50 bg-white p-6' : 'h-auto md:h-[600px]'}`}>
+        <div className={`flex flex-col md:flex-row gap-6 ${isFullscreen ? 'h-screen' : 'h-[calc(100vh-200px)]'}`}>
+
             {/* Popover */}
-            {popover && !isViewerEditing && (() => {
-                // Smart Positioning Logic
-                const screenW = window.innerWidth;
-                const isRightEdge = popover.x > screenW * 0.6; // If click is in the right 40%
-                const isLeftEdge = popover.x < screenW * 0.4;  // If click is in the left 40%
+            {popover && (() => {
+                const arrowStyle: React.CSSProperties = {
+                    position: 'absolute',
+                    width: '0',
+                    height: '0',
+                    borderLeft: '8px solid transparent',
+                    borderRight: '8px solid transparent',
+                    borderTop: '8px solid white',
+                    bottom: '-8px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    filter: 'drop-shadow(0 2px 1px rgba(0,0,0,0.05))'
+                };
 
-                let containerStyle: React.CSSProperties = { top: popover.y };
-                let containerClass = "fixed z-[9999] bg-slate-800 text-white p-2 rounded-lg shadow-xl flex flex-col items-center gap-2 animate-fade-in";
-                let arrowStyle: React.CSSProperties = {};
-                let arrowClass = "absolute top-full border-8 border-transparent border-t-slate-800";
-
-                if (isRightEdge) {
-                    // Align to Right
-                    containerStyle = { ...containerStyle, right: Math.max(10, screenW - popover.x - 100), left: 'auto', transform: 'translateY(-100%)' };
-                    // Wait, popover.y is usually top coordinate, we want it ABOVE the word? 
-                    // Previous logic: transform -translate-y-full (which is present in class lists usually or managed manually)
-                    // Let's check original generic style: transform -translate-x-1/2 -translate-y-full
-
-                    // Let's stick to standard "left" clamping
-                    // Clamp Left: min(max(10, x - width/2), screenW - width - 10)
-                    // But width is dynamic.
-
-                    // Simpler Relative Approach:
-                    containerStyle = { ...containerStyle, top: popover.y, transform: 'translateY(-100%)' };
-                    // We will set LEFT and avoid translate-x for edge cases
-
-                    containerStyle.right = '10px';
-                    containerStyle.left = 'auto';
-
-                    // Arrow needs to point to popover.x
-                    // Popover is at Right 10px. Width is approx 200px?
-                    // We can calc arrow offset from RIGHT.
-                    // ArrowRight = ScreenWidth - PopoverX.
-                    arrowStyle = { right: (screenW - popover.x - 10) + 'px' };
-                    arrowClass += " right-0"; // Reset left
-                } else if (isLeftEdge) {
-                    containerStyle = { ...containerStyle, top: popover.y, transform: 'translateY(-100%)' };
-                    containerStyle.left = '10px';
-                    containerStyle.right = 'auto';
-
-                    // Arrow Left = PopoverX - 10px
-                    arrowStyle = { left: (popover.x - 10) + 'px' };
-                } else {
-                    // Center (Default)
-                    containerStyle = { ...containerStyle, left: popover.x, top: popover.y, transform: 'translate(-50%, -100%)' };
-                    arrowClass += " left-1/2 -translate-x-1/2";
-                }
+                const popoverStyle: React.CSSProperties = {
+                    position: 'fixed',
+                    left: popover.x,
+                    top: popover.y - 10,
+                    transform: 'translate(-50%, -100%)',
+                    zIndex: 9999
+                };
 
                 return (
-                    <div
-                        className={containerClass}
-                        style={containerStyle}
-                        onMouseDown={(e) => e.stopPropagation()}
-                    >
-                        {/* Notebook Selector */}
-                        {allNotebooks.length > 0 && (
-                            <select
-                                value={targetNotebookId}
-                                onChange={e => setTargetNotebookId(e.target.value)}
-                                className="bg-slate-700 text-xs border border-slate-600 rounded p-1 mb-2 w-full outline-none text-white max-w-[200px]"
-                                onClick={e => e.stopPropagation()}
-                            >
-                                {allNotebooks.map(nb => (
-                                    <option key={nb.id} value={nb.id}>{nb.title}</option>
-                                ))}
-                            </select>
-                        )}
-
+                    <div className="bg-white rounded-lg shadow-xl border border-slate-200 p-3 flex flex-col gap-2 min-w-[160px] animate-scale-in" style={popoverStyle} onMouseDown={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                            <span className="font-bold text-slate-800">{popover.text}</span>
+                            <button onClick={() => setPopover(null)} className="text-slate-400 hover:text-slate-600"><i className="fas fa-times"></i></button>
+                        </div>
                         <div className="flex gap-2">
                             <button
-                                onClick={() => speak(popover.text)}
-                                className="bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-sm flex items-center gap-2"
-                            >
-                                <i className="fas fa-volume-up"></i>
-                            </button>
-                            <button
-                                onClick={handleTranslateSelection}
-                                className="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded text-sm flex items-center gap-2"
+                                onClick={handleTranslateWord}
+                                className="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded text-sm flex items-center gap-2 text-white"
                             >
                                 <i className="fas fa-language"></i> Çevir
                             </button>
                             <button
                                 onClick={handleAddWord}
-                                className="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-sm flex items-center gap-2"
+                                className="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-sm flex items-center gap-2 text-white"
                             >
                                 <i className="fas fa-plus"></i> Ekle
                             </button>
                         </div>
                         {translation && (
-                            <div className="text-xs text-center border-t border-slate-600 pt-2 mt-1 w-full max-w-[200px]">
+                            <div className="text-xs text-center border-t border-slate-100 pt-2 mt-1 w-full text-slate-700 font-medium">
                                 {translation}
                             </div>
                         )}
-                        {/* Triangle */}
-                        <div className={arrowClass} style={arrowStyle}></div>
+                        <div style={arrowStyle}></div>
                     </div>
                 );
             })()}
 
             {/* Left: Story List & Editor */}
-            <div className={`flex flex-col gap-4 h-full ${isFullscreen ? 'hidden' : 'min-h-[400px]'}`}>
+            <div className={`flex flex-col gap-4 h-full ${isFullscreen ? 'hidden' : 'w-full md:w-1/3 min-h-[400px]'}`}>
                 {/* Editor */}
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col">
                     <div className="flex justify-between items-center mb-4">
@@ -640,7 +485,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
 
                     <textarea
                         className="w-full flex-1 p-2 resize-none outline-none text-slate-700 leading-relaxed min-h-[200px]"
-                        placeholder="Hikayeni buraya yaz... Kullandığın kelimeler otomatik olarak vurgulanacak."
+                        placeholder="Hikayeni buraya yaz..."
                         value={content}
                         onChange={e => setContent(e.target.value)}
                     />
@@ -686,13 +531,33 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             {/* Right: Interactive Viewer / Editor */}
             <div
                 ref={viewerRef}
-                onMouseUp={handleMouseUp}
-                className={`bg-slate-100/50 p-4 rounded-xl border border-slate-200 shadow-inner overflow-hidden flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-slate-100 p-0 rounded-none' : 'h-full min-h-[400px]'}`}
+                className={`bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner overflow-hidden flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-slate-50 p-0 rounded-none' : 'flex-1 h-full min-h-[400px]'}`}
             >
                 {/* Toolbar */}
                 <div className={`flex justify-end gap-2 mb-4 border-b border-slate-200 pb-2 ${isFullscreen ? 'p-4 bg-white shadow-sm' : ''}`}>
 
-                    {/* EDIT CONTROLS IN VIEWER */}
+                    {/* Language Switcher */}
+                    {!isViewerEditing && (
+                        <div className="flex items-center gap-1 mr-auto bg-white rounded-lg p-1 border border-slate-200">
+                            {[
+                                { id: 'original', label: 'Orijinal' },
+                                { id: 'en', label: '🇬🇧 EN' },
+                                { id: 'de', label: '🇩🇪 DE' },
+                                { id: 'fr', label: '🇫🇷 FR' },
+                                { id: 'tr', label: '🇹🇷 TR' }
+                            ].map(opt => (
+                                <button
+                                    key={opt.id}
+                                    onClick={() => setViewLang(opt.id as any)}
+                                    className={`px-3 py-1 rounded text-xs font-bold transition ${viewLang === opt.id ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* EDIT CONTROLS */}
                     {isViewerEditing ? (
                         <>
                             <button
@@ -811,51 +676,49 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                                 <>
                                     <div className="mb-4 text-center">
                                         <h2 className="text-3xl font-bold text-slate-800 font-serif tracking-wide">{title || 'Başlıksız Hikaye'}</h2>
-                                        <p className="text-xs text-slate-400 mt-2">Cümlelerin üzerine tıklayarak Türkçe çevirisini görebilirsiniz.</p>
+                                        <p className="text-xs text-slate-400 mt-2">Cümlelerin üzerine tıklayarak çevirisini görebilirsiniz.</p>
                                     </div>
 
-                                    <div
-                                        className="text-xl leading-loose text-slate-800 font-serif break-words text-justify"
-                                    // Specific handler for sentence clicks to avoid conflict with text selection
-                                    // We use logic: if selection exists, popover shows. If click without selection, sentence translation shows.
-                                    >
-                                        {(() => {
-                                            // Split by sentence terminators but keep them
-                                            // Regex lookbehind/lookahead might be complex for split, so we use a simple match
-                                            // Split by (. ! ?) but keep delimiter
-                                            const sentences = content.match(/[^\.!\?]+[\.!\?]+|[^\.!\?]+$/g) || [content];
+                                    {isTranslatingStory ? (
+                                        <div className="flex flex-col items-center justify-center py-20 gap-4 text-slate-400">
+                                            <i className="fas fa-circle-notch fa-spin text-4xl text-blue-500"></i>
+                                            <p>Hikaye Çevriliyor...</p>
+                                        </div>
+                                    ) : (
+                                        <div className="text-xl leading-loose text-slate-800 font-serif break-words text-justify">
+                                            {(() => {
+                                                const activeText = (viewLang !== 'original' && translatedContent) ? translatedContent : content;
+                                                const sentences = activeText.match(/[^\.!\?]+[\.!\?]+|[^\.!\?]+$/g) || [activeText];
 
-                                            // State for toggled translations is needed per sentence?
-                                            // We can't use useState inside mapping. 
-                                            // We need a wrapper component or manage a list of "expandedSentenceIndices" in parent.
-                                            // Let's use a parent state: `const [expandedSentences, setExpandedSentences] = useState<number[]>([]);`
-                                            // But wait, I can't add state inside this render block.
-                                            // I need to refactor this render logic OR use a small sub-component.
-                                            // For speed/simplicity in this file, I'll use a sub-component defined outside or just manage state in StoryMode.
+                                                // Filter words based on viewLang?
+                                                // If viewLang is DE, show DE words. If Original/EN, show EN words.
+                                                // Default logic:
+                                                const targetLangForWords = viewLang === 'original' ? 'en' : viewLang;
+                                                const activeWords = words.filter(w => (w.language || 'en') === targetLangForWords);
 
-                                            return sentences.map((sentence, index) => (
-                                                <InteractiveSentence
-                                                    key={index}
-                                                    text={sentence}
-                                                    words={words}
-                                                    speak={speak}
-                                                    autoRead={autoRead}
-                                                    onWordClick={(text, x, y) => {
-                                                        // Explicit interaction override
-                                                        setPopover({ x, y, text });
-                                                        setTranslation(null);
-                                                    }}
-                                                />
-                                            ));
-                                        })()}
-                                    </div>
+                                                return sentences.map((sentence, index) => (
+                                                    <InteractiveSentence
+                                                        key={index}
+                                                        text={sentence}
+                                                        words={activeWords}
+                                                        speak={speak}
+                                                        autoRead={autoRead}
+                                                        onWordClick={(text, x, y) => {
+                                                            setPopover({ x, y, text });
+                                                            setTranslation(null);
+                                                        }}
+                                                        sourceLang={viewLang === 'original' ? 'en' : viewLang}
+                                                    />
+                                                ));
+                                            })()}
+                                        </div>
+                                    )}
                                 </>
                             )}
 
                         </article>
                     ) : (
                         <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                            {/* ... Empty state ... */}
                             <button onClick={() => setIsViewerEditing(true)} className="flex flex-col items-center gap-2 hover:text-blue-600 transition">
                                 <i className="fas fa-plus-circle text-4xl mb-2"></i>
                                 <span>Yeni Hikaye Yaz</span>
@@ -869,5 +732,3 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
 };
 
 export default StoryMode;
-
-

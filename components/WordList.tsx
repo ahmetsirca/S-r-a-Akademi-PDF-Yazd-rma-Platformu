@@ -122,7 +122,7 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
     const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newTerm || !newDef) return;
-        const res = await DBService.addNotebookWord(notebookId, newTerm, newDef);
+        const res = await DBService.addNotebookWord(notebookId, newTerm, newDef, targetLang);
         if (res) {
             setWords([res, ...words]);
             setNewTerm('');
@@ -136,6 +136,15 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
         await DBService.deleteNotebookWord(id);
         setWords(words.filter(w => w.id !== id));
     };
+
+    // Filter words by current tab
+    const filteredWords = words.filter(w => {
+        // If word has no language (legacy), treat as 'en' or show in all?
+        // User wants separation. Let's assume legacy is 'en' or user has to migrate. 
+        // My SQL migration sets default 'en', so checking 'en' should cover legacy.
+        const wLang = w.language || 'en';
+        return wLang === targetLang;
+    });
 
     const startEditing = (word: VocabWord) => {
         setEditingId(word.id);
@@ -158,10 +167,9 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
             const utterance = new SpeechSynthesisUtterance(text);
             // Detect lang roughly
             let lang = 'en-US';
-            if (targetLang === 'de' && /[a-zA-Z]/.test(text)) lang = 'de-DE';
-            else if (targetLang === 'fr' && /[a-zA-Z]/.test(text)) lang = 'fr-FR';
-            else if (targetLang === 'en' && /[a-zA-Z]/.test(text)) lang = 'en-US';
-            else lang = 'tr-TR';
+            if (targetLang === 'de') lang = 'de-DE';
+            else if (targetLang === 'fr') lang = 'fr-FR';
+            else if (targetLang === 'tr') lang = 'tr-TR';
 
             utterance.lang = lang;
             window.speechSynthesis.speak(utterance);
@@ -188,8 +196,8 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
                             setSuggestions([]);
                         }}
                         className={`flex items-center gap-2 px-6 py-2 rounded-full transition-all text-sm font-bold ${targetLang === lang.code
-                                ? 'bg-blue-600 text-white shadow-lg scale-105'
-                                : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
+                            ? 'bg-blue-600 text-white shadow-lg scale-105'
+                            : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
                             }`}
                     >
                         <span className="text-lg">{lang.flag}</span>
@@ -251,8 +259,8 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
                                     type="button"
                                     onClick={() => setNewDef(s.text)}
                                     className={`px-3 py-1 rounded-lg text-sm transition border flex items-center gap-2 group ${newDef === s.text
-                                            ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-                                            : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400 hover:text-blue-600'
+                                        ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                                        : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400 hover:text-blue-600'
                                         }`}
                                 >
                                     <span className="opacity-50 text-xs font-mono group-hover:opacity-100">{s.direction}</span>
@@ -268,10 +276,12 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
             <div className="grid grid-cols-1 gap-3">
                 {loading ? (
                     <p className="text-center text-slate-400">Yükleniyor...</p>
-                ) : words.length === 0 ? (
-                    <p className="text-center text-slate-400 py-8">Henüz kelime eklenmemiş.</p>
+                ) : filteredWords.length === 0 ? (
+                    <p className="text-center text-slate-400 py-8">
+                        {targetLang === 'en' ? 'İngilizce' : targetLang === 'de' ? 'Almanca' : 'Fransızca'} bölümünde henüz kelime yok.
+                    </p>
                 ) : (
-                    words.map(w => (
+                    filteredWords.map(w => (
                         <div key={w.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between group hover:border-blue-200 transition">
                             {editingId === w.id ? (
                                 // Edit Mode Row

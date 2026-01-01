@@ -127,8 +127,8 @@ export const DBService = {
     return (data || []).map((w: any) => ({ ...w, notebookId: w.notebook_id, createdAt: w.created_at }));
   },
 
-  async addNotebookWord(notebookId: string, term: string, definition: string) {
-    const { data } = await supabase.from('vocab_words').insert({ notebook_id: notebookId, term, definition }).select().single();
+  async addNotebookWord(notebookId: string, term: string, definition: string, language: string = 'en') {
+    const { data } = await supabase.from('vocab_words').insert({ notebook_id: notebookId, term, definition, language }).select().single();
     if (data) return { ...data, notebookId: data.notebook_id, createdAt: data.created_at };
     return null;
   },
