@@ -15,10 +15,24 @@ export const TranslationService = {
 
         if (sLang === tLang && sLang !== 'auto') return text;
 
+        // Helper for timeout-bounded fetch
+        const fetchWithTimeout = async (url: string, timeout = 3000) => {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+            try {
+                const res = await fetch(url, { signal: controller.signal });
+                clearTimeout(id);
+                return res;
+            } catch (e) {
+                clearTimeout(id);
+                throw e;
+            }
+        };
+
         // --- 1. LINGVA (Best for Privacy & Speed if up) ---
         // Great for single words or short sentences.
         try {
-            const res = await fetch(`https://lingva.ml/api/v1/${sLang}/${tLang}/${encodeURIComponent(text)}`);
+            const res = await fetchWithTimeout(`https://lingva.ml/api/v1/${sLang}/${tLang}/${encodeURIComponent(text)}`, 3000);
             if (res.ok) {
                 const data = await res.json();
                 if (data.translation) return data.translation;
@@ -27,14 +41,14 @@ export const TranslationService = {
 
         // --- 2. GOOGLE DIRECT (GTX) ---
         // Often blocked by CORS, but IF it works, it's the best. 
-        // Sometimes 'mode: no-cors' allows sending but not reading. We need to read.
-        // We try standard fetch.
         try {
             const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&q=${encodeURIComponent(text)}`;
-            const res = await fetch(url);
+            const res = await fetchWithTimeout(url, 3000);
             if (res.ok) {
                 const data = await res.json();
-                if (data && data[0]) return data[0].map((s: any) => s[0]).join('');
+                if (Array.isArray(data?.[0])) {
+                    return data[0].map((s: any) => Array.isArray(s) ? s[0] : '').join('');
+                }
             }
         } catch (e) { /* ignore */ }
 
@@ -42,24 +56,32 @@ export const TranslationService = {
         try {
             const gUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&q=${encodeURIComponent(text)}`;
             const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(gUrl)}`;
-            const res = await fetch(proxyUrl);
+            const res = await fetchWithTimeout(proxyUrl, 4000);
             if (res.ok) {
                 const data = await res.json();
-                if (data && data[0]) return data[0].map((s: any) => s[0]).join('');
+                if (Array.isArray(data?.[0])) {
+                    return data[0].map((s: any) => Array.isArray(s) ? s[0] : '').join('');
+                }
             }
         } catch (e) { /* ignore */ }
 
         // --- 4. GOOGLE via ALLORIGINS ---
         try {
             const gUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&q=${encodeURIComponent(text)}`;
-            // Use 'get' instead of 'raw' for better reliability with JSON
+            // Use 'get' instead of 'raw' for better reliability with JSON wrapping
             const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(gUrl)}`;
-            const res = await fetch(proxyUrl);
+            const res = await fetchWithTimeout(proxyUrl, 5000);
             if (res.ok) {
                 const wrapper = await res.json();
                 if (wrapper.contents) {
-                    const data = JSON.parse(wrapper.contents);
-                    if (data && data[0]) return data[0].map((s: any) => s[0]).join('');
+                    try {
+                        const data = JSON.parse(wrapper.contents);
+                        if (Array.isArray(data?.[0])) {
+                            return data[0].map((s: any) => Array.isArray(s) ? s[0] : '').join('');
+                        }
+                    } catch (parseErr) {
+                        console.warn('AllOrigins parse error', parseErr);
+                    }
                 }
             }
         } catch (e) { /* ignore */ }
@@ -67,17 +89,20 @@ export const TranslationService = {
         // --- 5. MYMEMORY (Last Resort - Quota limited) ---
         try {
             const pair = `${sLang}|${tLang}`;
-            const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${pair}`);
+            const res = await fetchWithTimeout(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${pair}`, 5000);
             const data = await res.json();
             if (data.responseStatus === 200 && data.responseData.translatedText) {
                 const result = data.responseData.translatedText;
-                if (!result.includes("MYMEMORY WARNING") && !result.includes("quota")) {
+                // More robust exclusion of MyMemory warnings
+                if (!result.includes("MYMEMORY WARNING")
+                    && !result.includes("quota")
+                    && !result.includes("Translated by")) {
                     return result;
                 }
             }
         } catch (e) { /* ignore */ }
 
-        // Return original text labeled as error if EVERYTHING fails, rather than a crash
+        // Return original text labeled as error if EVERYTHING fails
         console.error("Translation completely failed for:", text);
         return `[Hata: Çevrilemedi]`;
     },
@@ -100,19 +125,30 @@ export const TranslationService = {
         try {
             const gUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&dt=bd&q=${encodeURIComponent(text)}`;
             const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(gUrl)}`;
-            const res = await fetch(proxyUrl);
+            const res = await fetch(proxyUrl); // No strict timeout needed here, allow latency for rich data
             if (res.ok) {
                 const data = await res.json();
                 // Dictionary Data is in data[1]
-                if (data && data[1]) {
+                if (data && data[1] && Array.isArray(data[1])) {
                     data[1].forEach((group: any) => {
                         const type = group[0];
                         const terms = group[1];
                         if (Array.isArray(terms)) {
-                            terms.slice(0, 5).forEach((term: string) => results.push({ text: term, type }));
+                            // Safe string check
+                            terms.slice(0, 5).forEach((term: any) => {
+                                if (typeof term === 'string') results.push({ text: term, type });
+                            });
                         }
                     });
-                    if (results.length > 0) return results; // Success
+                }
+
+                // If dict found, return immediately
+                if (results.length > 0) return results; // Success
+
+                // 2. Main Translation (data[0]) if no dict found
+                if (Array.isArray(data?.[0])) {
+                    const val = data[0].map((s: any) => Array.isArray(s) ? s[0] : '').join('');
+                    if (val) results.push({ text: val, type: 'Çeviri' });
                 }
             }
         } catch (e) { /* ignore */ }
@@ -120,7 +156,7 @@ export const TranslationService = {
         // Strategy 2: Simple Translate (Fallback)
         // If dictionary data failed, just get the simple translation
         const simple = await this.translate(text, targetLang, sourceLang);
-        if (simple && !simple.includes('[Hata')) {
+        if (simple && !simple.startsWith('[Hata')) {
             results.push({ text: simple, type: 'Çeviri' });
         }
 
@@ -138,7 +174,7 @@ export const TranslationService = {
 
         for (const sent of sentences) {
             if ((currentChunk + sent).length > CHUNK_SIZE) {
-                chunks.push(currentChunk);
+                if (currentChunk) chunks.push(currentChunk); // Safer push logic
                 currentChunk = sent;
             } else {
                 currentChunk += sent;
@@ -149,10 +185,11 @@ export const TranslationService = {
         // Process sequentially to avoid triggering rate limits on proxies
         const results = [];
         for (const chunk of chunks) {
-            // Add small delay between chunks?
-            if (results.length > 0) await new Promise(r => setTimeout(r, 100));
-            const t = await this.translate(chunk, targetLang, sourceLang);
-            results.push(t);
+            if (chunk.trim()) {
+                if (results.length > 0) await new Promise(r => setTimeout(r, 100));
+                const t = await this.translate(chunk, targetLang, sourceLang);
+                results.push(t);
+            }
         }
         return results.join(' ');
     }
