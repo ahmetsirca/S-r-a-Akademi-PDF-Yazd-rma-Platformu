@@ -34,7 +34,8 @@ const InteractiveSentence: React.FC<{
         try {
             // Use TranslationService
             let src = sourceLang === 'tr' ? 'tr' : sourceLang;
-            const translated = await TranslationService.translate(text, 'tr', src);
+            let target = src === 'tr' ? 'en' : 'tr'; // Toggle direction
+            const translated = await TranslationService.translate(text, target, src);
             setTranslation(translated);
         } catch (err) {
             console.error(err);

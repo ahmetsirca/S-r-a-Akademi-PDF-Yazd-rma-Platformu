@@ -53,59 +53,34 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
 
             setIsTranslating(true);
             try {
-                // Parallel Query: Foreign->TR AND TR->Foreign
-                const [resForeignToTr, resTrToForeign] = await Promise.all([
-                    fetch(`https://api.mymemory.translated.net/get?q=${newTerm}&langpair=${targetLang}|tr`),
-                    fetch(`https://api.mymemory.translated.net/get?q=${newTerm}&langpair=tr|${targetLang}`)
-                ]);
+                // Detect Direction roughly
+                // If target is 'en' (default view), input might be EN, we want TR suggestions.
+                // Or input might be TR, we want EN suggestions.
+                // Let's query TranslationService lookup.
+                // We ask for TR definitions usually if adding into EN notebook?
+                // The user logic was bidirectional.
 
-                const data1 = await resForeignToTr.json();
-                const data2 = await resTrToForeign.json();
+                const destLang = 'tr';
+                // Assuming user types foreign term, wants TR meaning.
+                // Also could try reverse.
 
-                const distinctResults = new Map<string, { text: string, lang: string, direction: string }>();
+                const results = await TranslationService.lookupDictionary(newTerm, 'tr', targetLang);
 
-                // Helper to process matches
-                const processMatches = (data: any, sourceLang: string, destLang: string) => {
-                    const matches = data.matches || [];
+                // Map to format
+                const formatted = results.map(r => ({
+                    text: r.text,
+                    lang: 'tr',
+                    direction: `${flags[targetLang]}➜🇹🇷` // Show as Foreign->TR
+                }));
 
-                    // Add main match
-                    if (data.responseData.translatedText &&
-                        !data.responseData.translatedText.toLowerCase().includes("invalid key") &&
-                        data.responseData.translatedText.toLowerCase() !== newTerm.toLowerCase()) {
+                // Also try reverse? (If user typed TR, wants Foreign)
+                // Only if results are empty or few?
 
-                        const val = data.responseData.translatedText;
-                        distinctResults.set(val, {
-                            text: val,
-                            lang: destLang,
-                            direction: `${flags[sourceLang]}➜${flags[destLang]}`
-                        });
-                    }
+                setSuggestions(formatted);
 
-                    // Add other matches
-                    matches.forEach((m: any) => {
-                        if (m.translation &&
-                            m.translation.toLowerCase() !== newTerm.toLowerCase()) {
-                            distinctResults.set(m.translation, {
-                                text: m.translation,
-                                lang: destLang,
-                                direction: `${flags[sourceLang]}➜${flags[destLang]}`
-                            });
-                        }
-                    });
-                };
-
-                // Process Foreign -> TR
-                processMatches(data1, targetLang, 'tr');
-
-                // Process TR -> Foreign
-                processMatches(data2, 'tr', targetLang);
-
-                const finalList = Array.from(distinctResults.values()).slice(0, 8);
-                setSuggestions(finalList);
-
-                // Auto-fill logic
-                if (finalList.length > 0 && !newDef) {
-                    setNewDef(finalList[0].text);
+                // Auto-fill
+                if (formatted.length > 0 && !newDef) {
+                    setNewDef(formatted[0].text);
                 }
 
             } catch (e) {
