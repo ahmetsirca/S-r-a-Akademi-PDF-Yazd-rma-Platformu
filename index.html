@@ -4,6 +4,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com;
+    style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com;
+    font-src 'self' https://cdnjs.cloudflare.com;
+    img-src 'self' data: blob: https://yspjsauqjqujdavwagnw.supabase.co;
+    connect-src 'self' https://yspjsauqjqujdavwagnw.supabase.co wss://yspjsauqjqujdavwagnw.supabase.co https://cdn.tailwindcss.com;
+    worker-src 'self' blob:;
+    frame-src 'self' blob:;
+    object-src 'none';
+    base-uri 'self';
+  ">
   <title>SIRÇA AKADEMİ(KOMİSERİM PAEMİSYON)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
