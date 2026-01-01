@@ -408,6 +408,27 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
         setShowShareMenu(false);
     };
 
+    const speak = (text: string) => {
+        if ('speechSynthesis' in window) {
+            // Cancel current speaking if any
+            window.speechSynthesis.cancel();
+
+            const u = new SpeechSynthesisUtterance(text);
+            u.rate = readingSpeed; // Use the user's selected speed
+
+            // Determine language based on current view
+            let lang = 'en-US';
+            if (viewLang === 'de') lang = 'de-DE';
+            else if (viewLang === 'fr') lang = 'fr-FR';
+            else if (viewLang === 'tr') lang = 'tr-TR';
+            // If original, we default to EN, but ideally should match notebook lang potentially? 
+            // For now assuming Original = English as per app context.
+
+            u.lang = lang;
+            window.speechSynthesis.speak(u);
+        }
+    };
+
     return (
         <div className={`flex flex-col md:flex-row gap-6 ${isFullscreen ? 'h-screen' : 'h-[calc(100vh-200px)]'}`}>
 
