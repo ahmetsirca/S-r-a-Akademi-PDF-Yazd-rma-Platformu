@@ -1,70 +1,90 @@
 
+
 export const TranslationService = {
     /**
-     * Translates text using Google Translate (Unofficial gtx) as primary,
-     * falling back to MyMemory if needed.
+     * Translates text using multiple providers for maximum reliability.
+     * Order: Google (GTX) -> Lingva (Proxy) -> MyMemory (Fallback)
      */
     async translate(text: string, targetLang: string, sourceLang: string = 'auto'): Promise<string> {
         if (!text.trim()) return '';
 
-        // 1. Try Google Translate (gtx)
+        // Normalize Source/Target for different APIs
+        // Google: en, tr, de, fr
+        // Lingva: en, tr, de, fr
+        // MyMemory: en, tr, de, fr
+
+        // 1. Google Translate (Client: dict-chrome-ex - more robust vs gtx)
         try {
-            // Logic for Google: Chunks can be reasonably large (up to ~2000 chars usually works)
-            // But URL length limits apply. 
-            // Let's use a safe chunk size of 1000 chars.
-            // Note: Google 'gtx' endpoint usually returns data[0] as array of segments.
+            const gSource = sourceLang === 'auto' ? 'auto' : sourceLang;
+            const gTarget = targetLang === 'original' ? 'en' : targetLang; // Fallback logic
 
-            const gLang = targetLang === 'en' ? 'en' : targetLang; // Map codes if needed
-
-            const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${gLang}&dt=t&q=${encodeURIComponent(text)}`;
+            // Use 'dict-chrome-ex' client which often bypasses strict web checks better than 'gtx'
+            const url = `https://translate.googleapis.com/translate_a/single?client=dict-chrome-ex&sl=${gSource}&tl=${gTarget}&dt=t&q=${encodeURIComponent(text)}`;
 
             const res = await fetch(url);
-            if (!res.ok) throw new Error('Google Translate Failed');
-
-            const data = await res.json();
-            // data[0] contains the translated segments
-            // e.g. [[["Merhaba", "Hello", ...], ["Dunya", "World", ...]]]
-            if (data && data[0]) {
-                return data[0].map((seg: any) => seg[0]).join('');
+            if (res.ok) {
+                const data = await res.json();
+                // data[0] is array of [translated, source, ...]
+                if (data && data[0]) {
+                    const combined = data[0].map((seg: any) => seg[0]).join('');
+                    if (combined && combined.trim()) return combined;
+                }
             }
         } catch (e) {
-            console.warn("Google Translate failed, trying MyMemory fallback...", e);
+            // console.warn("Google Primary Failed", e);
         }
 
-        // 2. Fallback to MyMemory
+        // 2. Lingva Translate (Public instance - Acts as CORS proxy for Google)
         try {
-            // MyMemory requires source|target pair
+            const lSource = sourceLang === 'auto' ? 'auto' : sourceLang;
+            const lTarget = targetLang === 'original' ? 'en' : targetLang;
+
+            const res = await fetch(`https://lingva.ml/api/v1/${lSource}/${lTarget}/${encodeURIComponent(text)}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.translation) return data.translation;
+            }
+        } catch (e) {
+            // console.warn("Lingva Fallback Failed", e);
+        }
+
+        // 3. Fallback to MyMemory
+        try {
             const sLang = sourceLang === 'auto' ? 'Autodetect' : sourceLang;
-            const pair = `${sLang}|${targetLang}`;
+            const tLang = targetLang === 'original' ? 'en' : targetLang;
+            const pair = `${sLang}|${tLang}`;
 
             const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${pair}`);
             const data = await res.json();
 
             if (data.responseStatus !== 200) {
-                throw new Error(data.responseData.translatedText || "MyMemory Error");
+                // Check for specific matches to ignore useful matches? No, 200 is strict success usually.
+                // But sometimes status is 200 and text is warning.
+                // If status IS NOT 200, it's failed.
             }
 
-            // Check for quota warning in text (MyMemory sometimes returns 200 but sends warning text)
-            if (data.responseData.translatedText.includes("MYMEMORY WARNING")) {
-                throw new Error("MyMemory Quota Exceeded");
+            // MyMemory Quota Check
+            if (data.responseData.translatedText &&
+                (data.responseData.translatedText.includes("MYMEMORY WARNING") ||
+                    data.responseData.translatedText.includes("quota"))) {
+                throw new Error("MyMemory Limit");
             }
 
-            return data.responseData.translatedText;
+            return data.responseData.translatedText || text; // Return original if all else fails really bad? No, throw to show error.
         } catch (e) {
-            console.error("All translation providers failed", e);
-            return `[Çeviri Hatası] (${text.substring(0, 20)}...)`;
+            // All failed
+            console.error("All translation services failed.");
+            return `[Çeviri Yapılamadı] ${text.substring(0, 15)}...`;
         }
     },
 
     /**
-     * Translates a large text by splitting it into chunks to avoid URL length limits.
+     * Translates a large text by splitting it into chunks.
      */
     async translateFullText(text: string, targetLang: string, sourceLang: string = 'auto'): Promise<string> {
-        // Split by sentences to respect grammar, but chunk them to reduce requests.
-        // Google limit is effectively URL length (~2000 chars safely).
         const CHUNK_SIZE = 1500;
 
-        // Split by punctuation
+        // Split by sentences
         const sentences = text.match(/[^\.!\?]+[\.!\?]+|[^\.!\?]+$/g) || [text];
         const chunks: string[] = [];
         let currentChunk = '';
@@ -79,8 +99,7 @@ export const TranslationService = {
         }
         if (currentChunk) chunks.push(currentChunk);
 
-        // Process chunks sequentially to be polite, or parallel?
-        // Parallel is faster for Google.
+        // Process chunks
         const promises = chunks.map(chunk => this.translate(chunk, targetLang, sourceLang));
         const results = await Promise.all(promises);
 
