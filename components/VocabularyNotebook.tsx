@@ -121,7 +121,12 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
         if (!title) return;
         const parentId = currentNotebook ? currentNotebook.id : null;
         const res = await DBService.createNotebook(userId, title, parentId);
-        if (res) loadNotebooks();
+
+        if (res) {
+            loadNotebooks();
+        } else {
+            alert("Defter oluşturulamadı! (Muhtemelen yetki hatası veya veritabanı kısıtlaması). Lütfen yöneticiyle iletişime geçin.");
+        }
     };
 
     const handleDeleteNotebook = async (id: string, e: React.MouseEvent) => {
