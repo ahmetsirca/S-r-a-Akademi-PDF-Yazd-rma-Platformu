@@ -641,7 +641,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                             <i className={`fas ${isReadingStory ? 'fa-stop-circle' : 'fa-play-circle'} text-lg`}></i>
                         </button>
 
-                        <div className="flex flex-col items-center gap-0 w-16 md:w-24 hidden md:flex">
+                        <div className="flex flex-col items-center gap-0 w-16 md:w-24">
                             <span className="text-[10px] text-slate-400 font-bold uppercase">Hız: {readingSpeed}x</span>
                             <input
                                 type="range"
