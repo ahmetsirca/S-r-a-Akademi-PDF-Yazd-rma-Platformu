@@ -9,31 +9,24 @@ import { TranslationService } from '../services/translation';
 
 // Sub-component for Interactive Sentence
 const InteractiveSentence: React.FC<{
-    text: string,
-    words: VocabWord[],
-    speak: (t: string) => void,
-    autoRead: boolean,
-    onWordClick: (text: string, x: number, y: number) => void,
-    sourceLang?: string
-}> = ({ text, words, speak, autoRead, onWordClick, sourceLang = 'en' }) => {
+    text: string;
+    sourceLang: string;
+    onWordClick: (word: string, x: number, y: number) => void;
+    words: VocabWord[];
+    viewLang: string;
+    speak: (text: string) => void;
+}> = ({ text, sourceLang, onWordClick, words, viewLang, speak }) => {
     const [translation, setTranslation] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
     const handleTranslate = async (e: React.MouseEvent) => {
         e.stopPropagation();
-
-        // Auto-read if enabled
-        if (autoRead) {
-            speak(text);
-        }
-
         if (translation) {
-            setTranslation(null); // Toggle off
+            setTranslation(null);
             return;
         }
         setLoading(true);
         try {
-            // Translate from sourceLang (or auto) to TR
             // Use TranslationService
             let src = sourceLang === 'tr' ? 'tr' : sourceLang;
             const translated = await TranslationService.translate(text, 'tr', src);
