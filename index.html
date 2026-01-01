@@ -35,39 +35,98 @@
 
   <!-- Crash Handler Script -->
   <script>
-    window.addEventListener('load', function () {
-      const loader = document.getElementById('initial-loader');
+    (function () {
+      // Safe error UI builder to prevent XSS
+      function showSafeError(title, message, buttonText, code) {
+        var loader = document.getElementById('initial-loader');
+        if (!loader) return;
 
-      // Timeout to detect crash (Extended to 20s for mobile data)
-      setTimeout(function () {
-        // If loader is still there...
-        if (loader && document.body.contains(loader)) {
-          // Check if root has other children (meaning React mounted but loader didn't vanish)
-          const rootHandler = document.getElementById('root');
-          if (rootHandler && rootHandler.children.length === 0) { // React hasn't mounted anything yet
-            loader.innerHTML = '<div style="color:#ef4444;padding:20px;max-width:300px;margin:0 auto;">' +
-              '<h3 style="font-size:18px;font-weight:bold;margin-bottom:8px;">Yükleme Sorunu</h3>' +
-              '<p style="font-size:14px;margin-bottom:16px;">Sayfa yanıt vermiyor. Bağlantınız yavaş olabilir veya cihazınız bu sürümü desteklemiyor.</p>' +
-              '<button onclick="window.location.reload(true)" style="background:#2563eb;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-weight:bold;cursor:pointer;">Sayfayı Yenile</button>' +
-              '<p style="font-size:11px;margin-top:20px;color:#94a3b8">Hata Kodu: CONNECTION_TIMEOUT_20S</p>' +
-              '</div>';
-          }
+        // Clear existing content safely
+        loader.textContent = '';
+
+        // Style the container
+        loader.style.flexDirection = 'column';
+
+        var container = document.createElement('div');
+        container.style.color = '#ef4444';
+        container.style.padding = '20px';
+        container.style.maxWidth = '300px';
+        container.style.margin = '0 auto';
+        container.style.textAlign = 'center';
+        container.style.fontFamily = 'sans-serif';
+
+        var h3 = document.createElement('h3');
+        h3.textContent = title;
+        h3.style.fontSize = '18px';
+        h3.style.fontWeight = 'bold';
+        h3.style.marginBottom = '8px';
+
+        var p = document.createElement('p');
+        p.textContent = message; // SAFETY: textContent escapes HTML
+        p.style.fontSize = '14px';
+        p.style.marginBottom = '16px';
+
+        var btn = document.createElement('button');
+        btn.textContent = buttonText;
+        btn.onclick = function () { window.location.reload(true); };
+        btn.style.background = '#2563eb';
+        btn.style.color = '#fff';
+        btn.style.border = 'none';
+        btn.style.padding = '12px 24px';
+        btn.style.borderRadius = '8px';
+        btn.style.fontWeight = 'bold';
+        btn.style.cursor = 'pointer';
+
+        container.appendChild(h3);
+        container.appendChild(p);
+        container.appendChild(btn);
+
+        if (code) {
+          var codeP = document.createElement('p');
+          codeP.textContent = code;
+          codeP.style.fontSize = '11px';
+          codeP.style.marginTop = '20px';
+          codeP.style.color = '#94a3b8';
+          container.appendChild(codeP);
         }
-      }, 20000);
-    });
 
-    window.onerror = function (msg, url, lineNo, columnNo, error) {
-      const loader = document.getElementById('initial-loader');
-      if (loader) {
-        loader.innerHTML = '<div style="color:#ef4444;padding:20px;max-width:300px;margin:0 auto;">' +
-          '<h3 style="font-size:18px;font-weight:bold;margin-bottom:8px;">Uygulama Hatası</h3>' +
-          '<p style="font-size:14px;margin-bottom:16px;">Bir hata oluştu: ' + msg + '</p>' +
-          '<button onclick="window.location.reload(true)" style="background:#2563eb;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-weight:bold;cursor:pointer;">Yeniden Dene</button>' +
-          '</div>';
-        return true;
+        loader.appendChild(container);
       }
-      return false;
-    };
+
+      window.addEventListener('load', function () {
+        var loader = document.getElementById('initial-loader');
+
+        // Timeout to detect crash (Extended to 20s for mobile data)
+        setTimeout(function () {
+          // If loader is still there...
+          if (loader && document.body.contains(loader)) {
+            // Check if root has other children (meaning React mounted but loader didn't vanish)
+            var rootHandler = document.getElementById('root');
+            if (rootHandler && rootHandler.children.length === 0) { // React hasn't mounted anything yet
+              showSafeError(
+                'Yükleme Sorunu',
+                'Sayfa yanıt vermiyor. Bağlantınız yavaş olabilir veya cihazınız bu sürümü desteklemiyor.',
+                'Sayfayı Yenile',
+                'Hata Kodu: CONNECTION_TIMEOUT_20S'
+              );
+            }
+          }
+        }, 20000);
+      });
+
+      window.onerror = function (msg, url, lineNo, columnNo, error) {
+        var loader = document.getElementById('initial-loader');
+        if (loader) {
+          showSafeError(
+            'Uygulama Hatası',
+            'Bir hata oluştu: ' + msg,
+            'Yeniden Dene'
+          );
+          return true;
+        }
+        return false;
+      };
+    })();
   </script>
   <script type="module" src="/index.tsx"></script>
 </body>
