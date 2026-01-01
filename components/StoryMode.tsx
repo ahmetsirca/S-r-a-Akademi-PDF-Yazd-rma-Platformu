@@ -276,7 +276,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
         // Debounce or just run?
         fetchTranslation();
 
-    }, [viewLang]); // Only run when viewLang changes
+    }, [viewLang, content]); // Trigger when Lang OR Content changes
 
     const loadNotebooks = async () => {
         const { data: { user } } = await supabase.auth.getUser();
