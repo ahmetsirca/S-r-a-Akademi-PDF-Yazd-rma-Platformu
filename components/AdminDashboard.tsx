@@ -138,7 +138,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const handleSavePermissions = async () => {
     if (!selectedUser) return;
     try {
-      const result = await import('../services/db').then(m => m.DBService.updateUserPermission(
+      const { error } = await import('../services/db').then(m => m.DBService.updateUserPermission(
         selectedUser.id,
         permFolderIds,
         permFileIds,
@@ -147,9 +147,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         permPrintLimits
       ));
 
-      if (result.error) {
-        console.error("Supabase Update Error:", result.error);
-        alert(`Güncelleme başarısız: ${result.error.message || 'Veritabanı hatası'} `);
+      if (error) {
+        console.error("Supabase Update Error:", error);
+        alert(`Güncelleme başarısız: ${error.message || 'Veritabanı hatası'} `);
         return;
       }
 
