@@ -346,17 +346,25 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
 
     const handleTranslateWord = async () => {
         if (!popover) return;
-        setTranslation('Çevriliyor...');
+        setTranslation('...');
         try {
-            // Translate the clicked word from [CurrentLang] to TR
-            let src = viewLang === 'original' ? 'en' : viewLang;
-            if (viewLang === 'tr') src = 'tr'; // if viewing in TR, maybe translate to EN?
+            // Determine SOURCE -> TARGET
+            // Default: Source is viewLang (or EN if original), Target is TR
+            // Exception: If viewLang is TR, then Source is TR, Target is EN
 
-            // Use TranslationService
-            const translated = await TranslationService.translate(popover.text, 'tr', src === 'tr' ? 'tr' : src);
+            // Standardize source Code
+            let srcCode = viewLang === 'original' ? 'en' : viewLang;
+
+            // Determine target
+            let targetCode = 'tr';
+            if (srcCode === 'tr') targetCode = 'en';
+
+            // Special Case: Auto-detect if needed? No, context is known.
+
+            const translated = await TranslationService.translate(popover.text, targetCode, srcCode);
             setTranslation(translated);
         } catch (e) {
-            setTranslation('Hata.');
+            setTranslation('Hata');
         }
     };
 
