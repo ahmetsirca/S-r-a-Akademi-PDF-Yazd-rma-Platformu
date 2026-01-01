@@ -720,7 +720,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                         <i className="fas fa-file-word"></i>
                     </button>
                     <div className="w-px bg-slate-300 mx-1 h-6 self-center hidden md:block"></div>
-                    <button onClick={() => setIsFullscreen(!isFullscreen)} className="text-slate-400 hover:text-slate-800 p-2 rounded hover:bg-slate-200 transition hidden md:block" title="Tam Ekran">
+                    <button onClick={() => setIsFullscreen(!isFullscreen)} className="text-slate-400 hover:text-slate-800 p-2 rounded hover:bg-slate-200 transition" title="Tam Ekran">
                         <i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'}`}></i>
                     </button>
                 </div>
