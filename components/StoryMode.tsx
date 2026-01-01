@@ -182,6 +182,9 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
     const [showShareMenu, setShowShareMenu] = useState(false);
     const [isViewerEditing, setIsViewerEditing] = useState(false);
 
+    // Mobile View State
+    const [mobileView, setMobileView] = useState<'list' | 'viewer'>('list');
+
     // TTS State
     const [readingSpeed, setReadingSpeed] = useState(1.0);
     const [autoRead, setAutoRead] = useState(false);
@@ -192,6 +195,38 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
         loadData();
         loadNotebooks();
     }, [notebookId]);
+
+    // DEEP LINKING: Check URL on mount
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const storyId = params.get('story');
+        if (storyId && stories.length > 0) {
+            const found = stories.find(s => s.id === storyId);
+            if (found) {
+                handleEdit(found, false); // Don't scroll, just open
+            }
+        }
+    }, [stories]); // Run when stories load
+
+    // DEEP LINKING: Update URL when opening story
+    useEffect(() => {
+        const url = new URL(window.location.href);
+        if (editingId) {
+            url.searchParams.set('story', editingId);
+        } else {
+            url.searchParams.delete('story');
+        }
+        window.history.replaceState({}, '', url.toString());
+    }, [editingId]);
+
+    // TTS SPEED: Restart if speed changes while reading
+    useEffect(() => {
+        if (isReadingStory) {
+            // Restart with new speed
+            window.speechSynthesis.cancel();
+            speak(translatedContent || content);
+        }
+    }, [readingSpeed]);
 
     // When changing view lang, translate full story
     useEffect(() => {
@@ -290,23 +325,32 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                 setIsViewerEditing(false);
                 setViewLang('original'); // Reset view on save
                 loadData();
+                setMobileView('viewer'); // Switch to viewer on save
             }
         } catch (e: any) {
             alert(`Hata: ${e.message}`);
         }
     };
 
-    const handleEdit = (story: VocabStory) => {
+    const handleEdit = (story: VocabStory, scrollTo = true) => {
         setEditingId(story.id);
         setTitle(story.title);
         setContent(story.content);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setMobileView('viewer'); // Switch to viewer
+        if (scrollTo) window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleDelete = async (id: string) => {
         if (!confirm('Hikayeyi silmek istiyor musunuz?')) return;
         await DBService.deleteStory(id);
-        setStories(stories.filter(s => s.id !== id));
+        const newStories = stories.filter(s => s.id !== id);
+        setStories(newStories);
+        if (editingId === id) {
+            setEditingId(null);
+            setTitle('');
+            setContent('');
+            setMobileView('list');
+        }
     };
 
     // Word Interaction
@@ -358,18 +402,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
         const textToRead = translatedContent || content;
         if (!textToRead) return;
 
-        const u = new SpeechSynthesisUtterance(textToRead);
-        u.rate = readingSpeed;
-
-        // Detect lang
-        if (viewLang === 'de') u.lang = 'de-DE';
-        else if (viewLang === 'fr') u.lang = 'fr-FR';
-        else if (viewLang === 'tr') u.lang = 'tr-TR';
-        else u.lang = 'en-US';
-
-        u.onend = () => setIsReadingStory(false);
-        synthesisRef.current = u;
-        window.speechSynthesis.speak(u);
+        speak(textToRead);
         setIsReadingStory(true);
     };
 
@@ -396,14 +429,18 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
     };
 
     const shareStory = (platform: string) => {
-        const text = `Hikaye: ${title}\n\n${content}`;
+        // DEEP LINKING: Use URL which now has ?story=ID
         const url = window.location.href;
+        const text = `Hikaye: ${title}\n\n${content}\n\nOku: ${url}`;
+
         if (platform === 'twitter') window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`);
         if (platform === 'whatsapp') window.open(`https://wa.me/?text=${encodeURIComponent(text)}`);
         if (platform === 'telegram') window.open(`https://t.me/share/url?url=${url}&text=${encodeURIComponent(text)}`);
         if (platform === 'copy') {
-            navigator.clipboard.writeText(text);
-            alert("Kopyalandı!");
+            // Copy URL only or full text? User requested "Link paylaşma".
+            // Let's copy the URL primarily for sharing context.
+            navigator.clipboard.writeText(url);
+            alert("Hikaye Linki Kopyalandı!");
         }
         setShowShareMenu(false);
     };
@@ -425,6 +462,9 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             // For now assuming Original = English as per app context.
 
             u.lang = lang;
+
+            u.onend = () => setIsReadingStory(false); // Update state when done
+
             window.speechSynthesis.speak(u);
         }
     };
@@ -486,7 +526,8 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             })()}
 
             {/* Left: Story List & Editor */}
-            <div className={`flex flex-col gap-4 h-full ${isFullscreen ? 'hidden' : 'w-full md:w-1/3 min-h-[400px]'}`}>
+            {/* MOBILE LAYOUT: Show only if in 'list' mode OR strictly on desktop (hidden on mobile if viewer active) */}
+            <div className={`flex flex-col gap-4 h-full ${isFullscreen ? 'hidden' : 'w-full md:w-1/3 min-h-[400px]'} ${mobileView === 'viewer' ? 'hidden md:flex' : 'flex'}`}>
                 {/* Editor */}
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col">
                     <div className="flex justify-between items-center mb-4">
@@ -513,7 +554,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                     <div className="flex justify-between pt-4">
                         {editingId && (
                             <button
-                                onClick={() => { setEditingId(null); setTitle(''); setContent(''); }}
+                                onClick={() => { setEditingId(null); setTitle(''); setContent(''); setMobileView('list'); }}
                                 className="text-slate-500 text-sm hover:underline"
                             >
                                 Yeni Hikaye
@@ -550,16 +591,29 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             </div>
 
             {/* Right: Interactive Viewer / Editor */}
+            {/* MOBILE LAYOUT: Show only if in 'viewer' mode OR desktop */}
             <div
                 ref={viewerRef}
-                className={`bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner overflow-hidden flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-slate-50 p-0 rounded-none' : 'flex-1 h-full min-h-[400px]'}`}
+                className={`bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner overflow-hidden flex flex-col 
+                ${isFullscreen ? 'fixed inset-0 z-50 bg-slate-50 p-0 rounded-none' : 'flex-1 h-full min-h-[400px]'}
+                ${mobileView === 'viewer' ? 'flex' : 'hidden md:flex'}
+                `}
             >
                 {/* Toolbar */}
                 <div className={`flex justify-end gap-2 mb-4 border-b border-slate-200 pb-2 ${isFullscreen ? 'p-4 bg-white shadow-sm' : ''}`}>
 
+                    {/* MOBILE BACK BUTTON */}
+                    <button
+                        className="md:hidden mr-2 text-slate-500 hover:text-blue-600"
+                        onClick={() => setMobileView('list')}
+                        title="Listeye Dön"
+                    >
+                        <i className="fas fa-arrow-left"></i>
+                    </button>
+
                     {/* Language Switcher */}
                     {!isViewerEditing && (
-                        <div className="flex items-center gap-1 mr-auto bg-white rounded-lg p-1 border border-slate-200">
+                        <div className="flex items-center gap-1 mr-auto bg-white rounded-lg p-1 border border-slate-200 overflow-x-auto max-w-[200px] md:max-w-none no-scrollbar">
                             {[
                                 { id: 'original', label: 'Orijinal' },
                                 { id: 'en', label: '🇬🇧 EN' },
@@ -570,7 +624,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                                 <button
                                     key={opt.id}
                                     onClick={() => setViewLang(opt.id as any)}
-                                    className={`px-3 py-1 rounded text-xs font-bold transition ${viewLang === opt.id ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+                                    className={`px-3 py-1 rounded text-xs font-bold transition whitespace-nowrap ${viewLang === opt.id ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
                                 >
                                     {opt.label}
                                 </button>
@@ -628,7 +682,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                             title="Cümleye tıklayınca otomatik oku"
                         >
                             <i className={`fas ${autoRead ? 'fa-check-square' : 'fa-square'} mb-1`}></i>
-                            <span>Oto-Ses</span>
+                            <span className="hidden md:inline">Oto-Ses</span>
                         </button>
                     </div>
 
