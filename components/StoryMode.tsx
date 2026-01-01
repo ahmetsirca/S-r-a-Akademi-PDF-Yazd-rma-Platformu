@@ -431,7 +431,8 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
     const shareStory = (platform: string) => {
         // DEEP LINKING: Use URL which now has ?story=ID
         const url = window.location.href;
-        const text = `Hikaye: ${title}\n\n${content}\n\nOku: ${url}`;
+        // Simplify text: Title + Link only. NO CONTENT.
+        const text = `Hikaye: ${title}\nOku: ${url}`;
 
         if (platform === 'twitter') window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`);
         if (platform === 'whatsapp') window.open(`https://wa.me/?text=${encodeURIComponent(text)}`);
@@ -611,20 +612,20 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                         <i className="fas fa-arrow-left"></i>
                     </button>
 
-                    {/* Language Switcher */}
+                    {/* Language Switcher - Scrollable on mobile */}
                     {!isViewerEditing && (
-                        <div className="flex items-center gap-1 mr-auto bg-white rounded-lg p-1 border border-slate-200 overflow-x-auto max-w-[200px] md:max-w-none no-scrollbar">
+                        <div className="flex items-center gap-1 mr-auto bg-white rounded-lg p-1 border border-slate-200 overflow-x-auto max-w-[140px] md:max-w-none no-scrollbar shrink-0">
                             {[
                                 { id: 'original', label: 'Orijinal' },
-                                { id: 'en', label: '🇬🇧 EN' },
-                                { id: 'de', label: '🇩🇪 DE' },
-                                { id: 'fr', label: '🇫🇷 FR' },
-                                { id: 'tr', label: '🇹🇷 TR' }
+                                { id: 'en', label: '🇬🇧' },
+                                { id: 'de', label: '🇩🇪' },
+                                { id: 'fr', label: '🇫🇷' },
+                                { id: 'tr', label: '🇹🇷' }
                             ].map(opt => (
                                 <button
                                     key={opt.id}
                                     onClick={() => setViewLang(opt.id as any)}
-                                    className={`px-3 py-1 rounded text-xs font-bold transition whitespace-nowrap ${viewLang === opt.id ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+                                    className={`px-2 md:px-3 py-1 rounded text-xs font-bold transition whitespace-nowrap ${viewLang === opt.id ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
                                 >
                                     {opt.label}
                                 </button>
@@ -638,9 +639,9 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                             <button
                                 id="fullscreen-save-btn"
                                 onClick={handleSave}
-                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-1 rounded text-sm font-bold flex items-center gap-2 animate-pulse"
+                                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm font-bold flex items-center gap-1 animate-pulse"
                             >
-                                <i className="fas fa-save"></i> Kaydet
+                                <i className="fas fa-save"></i> <span className="hidden md:inline">Kaydet</span>
                             </button>
                             <button onClick={() => setIsViewerEditing(false)} className="text-slate-500 hover:text-slate-700 px-3 py-1 rounded hover:bg-slate-200 transition">
                                 İptal
@@ -654,7 +655,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                     )}
 
                     {/* TTS Controls */}
-                    <div className="flex items-center gap-2 border-r border-slate-300 pr-2 mr-2">
+                    <div className="flex items-center gap-1 md:gap-2 border-r border-slate-300 pr-1 md:pr-2 mr-1 md:mr-2">
                         <button
                             onClick={handleReadWholeStory}
                             className={`p-2 rounded transition ${isReadingStory ? 'text-red-600 bg-red-50 hover:bg-red-100' : 'text-slate-500 hover:text-green-600 hover:bg-green-50'}`}
@@ -663,7 +664,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                             <i className={`fas ${isReadingStory ? 'fa-stop-circle' : 'fa-play-circle'} text-lg`}></i>
                         </button>
 
-                        <div className="flex flex-col items-center gap-0 w-24">
+                        <div className="flex flex-col items-center gap-0 w-16 md:w-24 hidden md:flex">
                             <span className="text-[10px] text-slate-400 font-bold uppercase">Hız: {readingSpeed}x</span>
                             <input
                                 type="range"
@@ -682,7 +683,7 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                             title="Cümleye tıklayınca otomatik oku"
                         >
                             <i className={`fas ${autoRead ? 'fa-check-square' : 'fa-square'} mb-1`}></i>
-                            <span className="hidden md:inline">Oto-Ses</span>
+                            <span className="hidden md:inline">Oto</span>
                         </button>
                     </div>
 
@@ -712,14 +713,14 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
                         )}
                     </div>
 
-                    <button onClick={exportPDF} className="text-slate-400 hover:text-red-600 p-2 rounded hover:bg-red-50 transition" title="PDF İndir">
+                    <button onClick={exportPDF} className="text-slate-400 hover:text-red-600 p-2 rounded hover:bg-red-50 transition hidden md:block" title="PDF İndir">
                         <i className="fas fa-file-pdf"></i>
                     </button>
-                    <button onClick={exportWord} className="text-slate-400 hover:text-blue-700 p-2 rounded hover:bg-blue-50 transition" title="Word İndir">
+                    <button onClick={exportWord} className="text-slate-400 hover:text-blue-700 p-2 rounded hover:bg-blue-50 transition hidden md:block" title="Word İndir">
                         <i className="fas fa-file-word"></i>
                     </button>
-                    <div className="w-px bg-slate-300 mx-1 h-6 self-center"></div>
-                    <button onClick={() => setIsFullscreen(!isFullscreen)} className="text-slate-400 hover:text-slate-800 p-2 rounded hover:bg-slate-200 transition" title="Tam Ekran">
+                    <div className="w-px bg-slate-300 mx-1 h-6 self-center hidden md:block"></div>
+                    <button onClick={() => setIsFullscreen(!isFullscreen)} className="text-slate-400 hover:text-slate-800 p-2 rounded hover:bg-slate-200 transition hidden md:block" title="Tam Ekran">
                         <i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'}`}></i>
                     </button>
                 </div>

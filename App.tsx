@@ -48,8 +48,13 @@ const App: React.FC = () => {
     // 4. Try Query Params
     const paramMatch = fullUrl.match(/notebookId=([\w-]+)/);
     if (paramMatch && paramMatch[1]) return paramMatch[1];
+
+    // Support both 'storyId' and 'story'
     const storyParamMatch = fullUrl.match(/storyId=([\w-]+)/);
     if (storyParamMatch && storyParamMatch[1]) return storyParamMatch[1];
+
+    const storySimpleMatch = new URLSearchParams(window.location.search).get('story');
+    if (storySimpleMatch) return storySimpleMatch;
 
     const hashParamMatch = hash.match(/notebookId=([\w-]+)/);
     if (hashParamMatch && hashParamMatch[1]) return hashParamMatch[1];
