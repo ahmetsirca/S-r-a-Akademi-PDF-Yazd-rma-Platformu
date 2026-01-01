@@ -71,7 +71,8 @@ const InteractiveSentence: React.FC<{
     };
 
     const renderTokens = () => {
-        const tokens = text.split(/(\s+|[., !?;]) /);
+        // Robust splitting: Captures whitespace OR punctuation as separators
+        const tokens = text.split(/([.,!?;:()"'\s]+)/); // Split by delimiters, capturing them
         return tokens.map((token, i) => {
             // Only search for matches if we are in Original mode or if words match the current view lang?
             // For now search always.
@@ -92,21 +93,24 @@ const InteractiveSentence: React.FC<{
                 );
             }
             // Make non-matched words clickable for popover
-            if (token.trim() && !/^[., !?;: () "'\s]+$/.test(token)) {
+            // Check if token is actually a word (not just space/punct)
+            // We use the same regex as clean logic mostly
+            if (token.trim() && !/^[.,!?;:()"'\s]+$/.test(token)) {
                 return (
                     <span
                         key={i}
                         className="hover:text-blue-500 hover:bg-yellow-100 transition cursor-pointer select-none"
                         onClick={(e) => {
                             e.stopPropagation();
-                            onWordClick(token.replace(/[., !?;: () "']/g, ''), e.clientX, e.clientY);
+                            onWordClick(token.replace(/[.,!?;:()"']/g, ''), e.clientX, e.clientY);
                         }}
                     >
                         {token}
                     </span>
                 );
             }
-            return <span key={i} className="text-slate-700">{token.replace(/\n/g, '')}</span>;
+            // Just return punctuation/space as text
+            return <span key={i} className="text-slate-700">{token}</span>;
         });
     };
 
