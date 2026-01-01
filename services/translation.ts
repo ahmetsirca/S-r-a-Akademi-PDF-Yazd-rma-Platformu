@@ -1,95 +1,134 @@
+
 export const TranslationService = {
     /**
-     * Translates text using a hybrid strategy optimized for length.
-     * Words (< 100 chars): Lingva -> Google (Proxy)
-     * Sentences (> 100 chars): Google (Proxy) -> Lingva
+     * "Waterfall" Strategy: Try connection methods from fastest/direct to slowest/proxy.
+     * Goals: 
+     * 1. Speed (Direct Google/Lingva)
+     * 2. Reliability (Multiple Proxies)
+     * 3. Fallback (MyMemory)
      */
     async translate(text: string, targetLang: string, sourceLang: string = 'auto'): Promise<string> {
         if (!text.trim()) return '';
 
-        // Normalize codes
         const sLang = sourceLang === 'original' || sourceLang === 'auto' ? 'auto' : sourceLang;
         const tLang = targetLang === 'original' ? 'en' : targetLang;
 
-        // Prevent identical lang translation
         if (sLang === tLang && sLang !== 'auto') return text;
 
-        const isShort = text.length < 100;
-
-        // --- STRATEGY SET A: SINGLE WORD / SHORT PHRASE (Prioritize Lingva) ---
-        if (isShort) {
-            // 1. Lingva (Best for words, clean JSON, no CORS)
-            try {
-                const res = await fetch(`https://lingva.ml/api/v1/${sLang}/${tLang}/${encodeURIComponent(text)}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.translation) return data.translation;
-                }
-            } catch (e) { /* continue */ }
-        }
-
-        // --- STRATEGY SET B: GOOGLE PROXIES (Best for Sentences / Fallback for words) ---
-
-        // 2. Google via corsproxy.io
+        // --- 1. LINGVA (Best for Privacy & Speed if up) ---
+        // Great for single words or short sentences.
         try {
-            const googleUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&q=${encodeURIComponent(text)}`;
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
+            const res = await fetch(`https://lingva.ml/api/v1/${sLang}/${tLang}/${encodeURIComponent(text)}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.translation) return data.translation;
+            }
+        } catch (e) { /* ignore */ }
 
+        // --- 2. GOOGLE DIRECT (GTX) ---
+        // Often blocked by CORS, but IF it works, it's the best. 
+        // Sometimes 'mode: no-cors' allows sending but not reading. We need to read.
+        // We try standard fetch.
+        try {
+            const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&q=${encodeURIComponent(text)}`;
+            const res = await fetch(url);
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data[0]) return data[0].map((s: any) => s[0]).join('');
+            }
+        } catch (e) { /* ignore */ }
+
+        // --- 3. GOOGLE via CORSPROXY.IO ---
+        try {
+            const gUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&q=${encodeURIComponent(text)}`;
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(gUrl)}`;
             const res = await fetch(proxyUrl);
             if (res.ok) {
                 const data = await res.json();
-                if (data && data[0]) {
-                    return data[0].map((seg: any) => seg[0]).join('');
-                }
+                if (data && data[0]) return data[0].map((s: any) => s[0]).join('');
             }
-        } catch (e) { /* continue */ }
+        } catch (e) { /* ignore */ }
 
-        // 3. Google via AllOrigins
+        // --- 4. GOOGLE via ALLORIGINS ---
         try {
-            const googleUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&q=${encodeURIComponent(text)}`;
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(googleUrl)}`;
-
+            const gUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&q=${encodeURIComponent(text)}`;
+            // Use 'get' instead of 'raw' for better reliability with JSON
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(gUrl)}`;
             const res = await fetch(proxyUrl);
             if (res.ok) {
-                const data = await res.json();
-                if (data && data[0]) {
-                    return data[0].map((seg: any) => seg[0]).join('');
+                const wrapper = await res.json();
+                if (wrapper.contents) {
+                    const data = JSON.parse(wrapper.contents);
+                    if (data && data[0]) return data[0].map((s: any) => s[0]).join('');
                 }
             }
-        } catch (e) { /* continue */ }
+        } catch (e) { /* ignore */ }
 
-        // 4. Lingva (Fallback for sentences if it wasn't tried yet)
-        if (!isShort) {
-            try {
-                const res = await fetch(`https://lingva.ml/api/v1/${sLang}/${tLang}/${encodeURIComponent(text)}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.translation) return data.translation;
-                }
-            } catch (e) { /* continue */ }
-        }
-
-        // 5. MyMemory (Last Resort)
+        // --- 5. MYMEMORY (Last Resort - Quota limited) ---
         try {
-            const mmSLang = sLang === 'auto' ? 'Autodetect' : sLang;
-            const pair = `${mmSLang}|${tLang}`;
+            const pair = `${sLang}|${tLang}`;
             const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${pair}`);
             const data = await res.json();
-
             if (data.responseStatus === 200 && data.responseData.translatedText) {
                 const result = data.responseData.translatedText;
                 if (!result.includes("MYMEMORY WARNING") && !result.includes("quota")) {
                     return result;
                 }
             }
-        } catch (e) { /* continue */ }
+        } catch (e) { /* ignore */ }
 
-        // Fail
-        return `[Hata] ${text}`;
+        // Return original text labeled as error if EVERYTHING fails, rather than a crash
+        console.error("Translation completely failed for:", text);
+        return `[Hata: Çevrilemedi]`;
     },
 
     /**
-     * Translates full text by chunking.
+     * Helper for Dictionary Lookups (Synonyms, etc)
+     * Uses similar robust strategy chain.
+     */
+    async lookupDictionary(text: string, targetLang: string, sourceLang: string = 'auto'): Promise<{ text: string, type?: string }[]> {
+        if (!text.trim()) return [];
+
+        // We only support Dictionary lookup via Google API (proxy) currently.
+        // If proxies fail, we fall back to simple translation.
+
+        const results: { text: string, type?: string }[] = [];
+        const sLang = sourceLang === 'original' || sourceLang === 'auto' ? 'auto' : sourceLang;
+        const tLang = targetLang === 'original' ? 'en' : targetLang;
+
+        // Strategy 1: Google Dictionary via CorsProxy
+        try {
+            const gUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&dt=bd&q=${encodeURIComponent(text)}`;
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(gUrl)}`;
+            const res = await fetch(proxyUrl);
+            if (res.ok) {
+                const data = await res.json();
+                // Dictionary Data is in data[1]
+                if (data && data[1]) {
+                    data[1].forEach((group: any) => {
+                        const type = group[0];
+                        const terms = group[1];
+                        if (Array.isArray(terms)) {
+                            terms.slice(0, 5).forEach((term: string) => results.push({ text: term, type }));
+                        }
+                    });
+                    if (results.length > 0) return results; // Success
+                }
+            }
+        } catch (e) { /* ignore */ }
+
+        // Strategy 2: Simple Translate (Fallback)
+        // If dictionary data failed, just get the simple translation
+        const simple = await this.translate(text, targetLang, sourceLang);
+        if (simple && !simple.includes('[Hata')) {
+            results.push({ text: simple, type: 'Çeviri' });
+        }
+
+        return results;
+    },
+
+    /**
+     * Chunking logic for long stories
      */
     async translateFullText(text: string, targetLang: string, sourceLang: string = 'auto'): Promise<string> {
         const CHUNK_SIZE = 1500;
@@ -107,67 +146,14 @@ export const TranslationService = {
         }
         if (currentChunk) chunks.push(currentChunk);
 
-        const promises = chunks.map(chunk => this.translate(chunk, targetLang, sourceLang));
-        const results = await Promise.all(promises);
+        // Process sequentially to avoid triggering rate limits on proxies
+        const results = [];
+        for (const chunk of chunks) {
+            // Add small delay between chunks?
+            if (results.length > 0) await new Promise(r => setTimeout(r, 100));
+            const t = await this.translate(chunk, targetLang, sourceLang);
+            results.push(t);
+        }
         return results.join(' ');
-    },
-
-    /**
-     * Looks up dictionary definitions (synonyms, parts of speech).
-     * Returns "Professional" results using Google Dictionary data.
-     */
-    async lookupDictionary(text: string, targetLang: string, sourceLang: string = 'auto'): Promise<{ text: string, type?: string }[]> {
-        if (!text.trim()) return [];
-
-        const sLang = sourceLang === 'original' || sourceLang === 'auto' ? 'auto' : sourceLang;
-        const tLang = targetLang === 'original' ? 'en' : targetLang;
-
-        const results: { text: string, type?: string }[] = [];
-
-        // STRATEGY: Google GTX via Proxy for Dictionary Data (index 1 of response)
-        try {
-            const googleUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&dt=bd&q=${encodeURIComponent(text)}`;
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
-            // dt=bd requests dictionary data
-
-            const res = await fetch(proxyUrl);
-            if (res.ok) {
-                const data = await res.json();
-
-                // 1. Dictionary Data (data[1])
-                // Format: [ ["noun", ["word1", "word2"], ...], ["verb", ...] ]
-                if (data && data[1]) {
-                    data[1].forEach((group: any) => {
-                        const type = group[0]; // noun, verb, etc.
-                        const terms = group[1]; // array of strings
-                        if (Array.isArray(terms)) {
-                            terms.slice(0, 5).forEach((term: string) => {
-                                results.push({ text: term, type });
-                            });
-                        }
-                    });
-                }
-
-                // 2. Main Translation (data[0]) if no dict found
-                if (results.length === 0 && data[0]) {
-                    const val = data[0].map((seg: any) => seg[0]).join('');
-                    if (val) results.push({ text: val, type: 'Çeviri' });
-                }
-            }
-        } catch (e) {
-            console.warn("Dict lookup failed", e);
-        }
-
-        // Fallback: Lingva
-        if (results.length === 0) {
-            try {
-                const simple = await this.translate(text, tLang, sLang);
-                if (simple && !simple.startsWith('[Hata]')) {
-                    results.push({ text: simple, type: 'Çeviri' });
-                }
-            } catch (e) { }
-        }
-
-        return results;
     }
 };
