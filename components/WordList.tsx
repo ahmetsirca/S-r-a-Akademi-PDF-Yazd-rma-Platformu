@@ -11,6 +11,8 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
     const [loading, setLoading] = useState(true);
     const [newTerm, setNewTerm] = useState('');
     const [newDef, setNewDef] = useState('');
+    const [suggestions, setSuggestions] = useState<string[]>([]); // Store multiple meanings
+    const [isTranslating, setIsTranslating] = useState(false);
 
     // Editing State
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -31,19 +33,51 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
     // Auto-translate debounce for NEW words
     useEffect(() => {
         const translate = async () => {
-            if (!newTerm || newTerm.length < 2) return;
+            if (!newTerm || newTerm.length < 2) {
+                setSuggestions([]);
+                return;
+            }
+
+            setIsTranslating(true);
             try {
                 const response = await fetch(`https://api.mymemory.translated.net/get?q=${newTerm}&langpair=en|tr`);
                 const data = await response.json();
+
+                // Parse Matches for Richer Suggestions
+                const matches = data.matches || [];
+                const distinctDefs = new Set<string>();
+
+                // Add main translation first
                 if (data.responseData.translatedText) {
-                    setNewDef(data.responseData.translatedText);
+                    distinctDefs.add(data.responseData.translatedText);
                 }
+
+                // Add other high quality matches
+                matches.forEach((m: any) => {
+                    if (m.translation && !m.translation.toLowerCase().includes(newTerm.toLowerCase())) {
+                        distinctDefs.add(m.translation);
+                    }
+                });
+
+                const finalList = Array.from(distinctDefs).slice(0, 5); // Limit to 5
+                setSuggestions(finalList);
+
+                // Auto-fill first only if empty (Quality of Life)
+                if (finalList.length > 0 && !newDef) {
+                    // Optionally don't auto-fill, just show suggestions to force choice?
+                    // User asked for "see multiple meanings".
+                    // Let's auto-fill the best one but show others.
+                    setNewDef(finalList[0]);
+                }
+
             } catch (e) {
                 console.error("Translation fail", e);
+            } finally {
+                setIsTranslating(false);
             }
         };
 
-        const timer = setTimeout(translate, 1000);
+        const timer = setTimeout(translate, 800); // 800ms debounce
         return () => clearTimeout(timer);
     }, [newTerm]);
 
@@ -55,6 +89,7 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
             setWords([res, ...words]);
             setNewTerm('');
             setNewDef('');
+            setSuggestions([]);
         }
     };
 
@@ -92,25 +127,61 @@ const WordList: React.FC<WordListProps> = ({ notebookId }) => {
 
     return (
         <div className="space-y-6">
-            {/* Add Form */}
-            <form onSubmit={handleAdd} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4">
-                <input
-                    type="text"
-                    placeholder="İngilizce Kelime"
-                    className="flex-1 p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                    value={newTerm}
-                    onChange={e => setNewTerm(e.target.value)}
-                />
-                <input
-                    type="text"
-                    placeholder="Türkçe Karşılığı"
-                    className="flex-1 p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                    value={newDef}
-                    onChange={e => setNewDef(e.target.value)}
-                />
-                <button className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700 transition">
-                    Ekle
-                </button>
+            {/* Add Form - UX Enhanced */}
+            <form onSubmit={handleAdd} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col gap-4 relative">
+                <h3 className="text-sm font-bold text-slate-400 uppercase mb-2">Yeni Kelime Ekle</h3>
+
+                <div className="flex flex-col md:flex-row gap-4">
+                    <div className="flex-1 relative">
+                        <input
+                            type="text"
+                            placeholder="İngilizce kelime (örn: run)"
+                            className="w-full p-4 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg font-bold text-slate-700 bg-slate-50 focus:bg-white transition"
+                            value={newTerm}
+                            onChange={e => setNewTerm(e.target.value)}
+                        />
+                        {isTranslating && (
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
+                                <i className="fas fa-circle-notch fa-spin"></i>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex-1 flex flex-col gap-2">
+                        <input
+                            type="text"
+                            placeholder="Türkçe karşılığı"
+                            className="w-full p-4 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg text-slate-700 bg-slate-50 focus:bg-white transition"
+                            value={newDef}
+                            onChange={e => setNewDef(e.target.value)}
+                        />
+                    </div>
+
+                    <button className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg hover:shadow-blue-500/30 active:scale-95">
+                        <i className="fas fa-plus mr-2"></i> Ekle
+                    </button>
+                </div>
+
+                {/* Smart Suggestions Chips */}
+                {suggestions.length > 0 && (
+                    <div className="animate-fade-in mt-2 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                        <p className="text-xs text-blue-500 font-bold mb-2 flex items-center gap-2">
+                            <i className="fas fa-magic"></i> Önerilen Anlamlar:
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            {suggestions.map((s, idx) => (
+                                <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => setNewDef(s)}
+                                    className={`px-3 py-1 rounded-full text-sm transition border ${newDef === s ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400 hover:text-blue-600'}`}
+                                >
+                                    {s}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </form>
 
             {/* List */}
