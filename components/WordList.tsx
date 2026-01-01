@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { VocabWord } from '../types';
 import { DBService } from '../services/db';
+import { TranslationService } from '../services/translation';
 
 interface WordListProps {
     notebookId: string;
