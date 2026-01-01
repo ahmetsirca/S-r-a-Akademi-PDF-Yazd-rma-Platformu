@@ -9,6 +9,7 @@ export const TranslationService = {
      */
     async translate(text: string, targetLang: string, sourceLang: string = 'auto'): Promise<string> {
         if (!text.trim()) return '';
+        console.log(`[TranslationService] Translating: "${text.substring(0, 20)}..." (${sourceLang} -> ${targetLang})`);
 
         const sLang = sourceLang === 'original' || sourceLang === 'auto' ? 'auto' : sourceLang;
         const tLang = targetLang === 'original' ? 'en' : targetLang;
@@ -32,41 +33,56 @@ export const TranslationService = {
         // --- 1. LINGVA (Best for Privacy & Speed if up) ---
         // Great for single words or short sentences.
         try {
+            console.log('[TranslationService] Trying Strategy 1: Lingva');
             const res = await fetchWithTimeout(`https://lingva.ml/api/v1/${sLang}/${tLang}/${encodeURIComponent(text)}`, 3000);
             if (res.ok) {
                 const data = await res.json();
-                if (data.translation) return data.translation;
+                if (data.translation) {
+                    console.log('[TranslationService] Success with Lingva');
+                    return data.translation;
+                }
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            console.warn('[TranslationService] Lingva failed:', e);
+        }
 
         // --- 2. GOOGLE DIRECT (GTX) ---
         // Often blocked by CORS, but IF it works, it's the best. 
         try {
+            console.log('[TranslationService] Trying Strategy 2: Google Direct');
             const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&q=${encodeURIComponent(text)}`;
             const res = await fetchWithTimeout(url, 3000);
             if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data?.[0])) {
+                    console.log('[TranslationService] Success with Google Direct');
                     return data[0].map((s: any) => Array.isArray(s) ? s[0] : '').join('');
                 }
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            console.warn('[TranslationService] Google Direct failed:', e);
+        }
 
         // --- 3. GOOGLE via CORSPROXY.IO ---
         try {
+            console.log('[TranslationService] Trying Strategy 3: CorsProxy.io');
             const gUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&q=${encodeURIComponent(text)}`;
             const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(gUrl)}`;
             const res = await fetchWithTimeout(proxyUrl, 4000);
             if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data?.[0])) {
+                    console.log('[TranslationService] Success with CorsProxy');
                     return data[0].map((s: any) => Array.isArray(s) ? s[0] : '').join('');
                 }
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            console.warn('[TranslationService] CorsProxy failed:', e);
+        }
 
         // --- 4. GOOGLE via ALLORIGINS ---
         try {
+            console.log('[TranslationService] Trying Strategy 4: AllOrigins');
             const gUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&q=${encodeURIComponent(text)}`;
             // Use 'get' instead of 'raw' for better reliability with JSON wrapping
             const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(gUrl)}`;
@@ -77,6 +93,7 @@ export const TranslationService = {
                     try {
                         const data = JSON.parse(wrapper.contents);
                         if (Array.isArray(data?.[0])) {
+                            console.log('[TranslationService] Success with AllOrigins');
                             return data[0].map((s: any) => Array.isArray(s) ? s[0] : '').join('');
                         }
                     } catch (parseErr) {
@@ -84,10 +101,13 @@ export const TranslationService = {
                     }
                 }
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            console.warn('[TranslationService] AllOrigins failed:', e);
+        }
 
         // --- 5. MYMEMORY (Last Resort - Quota limited) ---
         try {
+            console.log('[TranslationService] Trying Strategy 5: MyMemory');
             const pair = `${sLang}|${tLang}`;
             const res = await fetchWithTimeout(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${pair}`, 5000);
             const data = await res.json();
@@ -97,10 +117,13 @@ export const TranslationService = {
                 if (!result.includes("MYMEMORY WARNING")
                     && !result.includes("quota")
                     && !result.includes("Translated by")) {
+                    console.log('[TranslationService] Success with MyMemory');
                     return result;
                 }
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            console.warn('[TranslationService] MyMemory failed:', e);
+        }
 
         // Return original text labeled as error if EVERYTHING fails
         console.error("Translation completely failed for:", text);
