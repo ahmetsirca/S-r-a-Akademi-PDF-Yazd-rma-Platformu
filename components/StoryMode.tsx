@@ -5,6 +5,7 @@ import { supabase } from '../services/supabase';
 import { jsPDF } from 'jspdf';
 import { Document, Packer, Paragraph, HeadingLevel } from 'docx';
 import { saveAs } from 'file-saver';
+import { TranslationService } from '../services/translation';
 
 // Sub-component for Interactive Sentence
 const InteractiveSentence: React.FC<{
@@ -33,19 +34,13 @@ const InteractiveSentence: React.FC<{
         setLoading(true);
         try {
             // Translate from sourceLang (or auto) to TR
-            // If source is TR, maybe translate to EN? 
-            // User request implies "Show me Turkish translation" mostly.
-            // But if text is TR, user likely wants EN?
-            // Let's assume standard behavior: Translate to TR unless source is TR, then EN.
-            let pair = `${sourceLang}|tr`;
-            if (sourceLang === 'tr') pair = 'tr|en';
-
-            const res = await fetch(`https://api.mymemory.translated.net/get?q=${text.replace(/[.!?]/g, '')}&langpair=${pair}`);
-            const data = await res.json();
-            if (data.responseData.translatedText) {
-                setTranslation(data.responseData.translatedText);
-            }
+            // Use TranslationService
+            let src = sourceLang === 'tr' ? 'tr' : sourceLang;
+            const translated = await TranslationService.translate(text, 'tr', src);
+            setTranslation(translated);
         } catch (err) {
+            console.error(err);
+        } finally {
             console.error(err);
         } finally {
             setLoading(false);
@@ -239,44 +234,22 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
 
             setIsTranslatingStory(true);
             try {
-                // Split logic roughly:
-                const cleanText = content.replace(/\n/g, ' ');
-                // Use a larger chunk size but for safety lets fetch sentence by sentence or blocks
-                // API MyMemory Limit: 500 chars/req strict.
-                // We need to chunk it.
+                try {
+                    // Use robust TranslationService
+                    const translated = await TranslationService.translateFullText(content, viewLang);
+                    setTranslatedContent(translated);
+                } catch (e) {
+                    console.error("Story translation error", e);
+                    setTranslatedContent("Çeviri servisi şu an meşgul, lütfen daha sonra tekrar deneyiniz.");
+                } finally {
+                    setIsTranslatingStory(false);
+                }
+            };
 
-                const sentences = cleanText.match(/[^\.!\?]+[\.!\?]+|[^\.!\?]+$/g) || [cleanText];
+            // Debounce or just run?
+            fetchTranslation();
 
-                // Batch requests
-                // Note: Heavy usage might hit limits.
-                const translatedSentences = await Promise.all(
-                    sentences.map(async (s) => {
-                        if (s.length < 2) return s;
-                        try {
-                            // Assume source is auto (or we guess 'tr' if user said "I write TR")
-                            // We translate TO matching viewLang
-                            const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(s)}&langpair=Autodetect|${viewLang}`);
-                            const json = await res.json();
-                            return json.responseData.translatedText || s;
-                        } catch (e) {
-                            return s;
-                        }
-                    })
-                );
-
-                setTranslatedContent(translatedSentences.join(' '));
-
-            } catch (e) {
-                console.error("Story translation error", e);
-            } finally {
-                setIsTranslatingStory(false);
-            }
-        };
-
-        // Debounce or just run?
-        fetchTranslation();
-
-    }, [viewLang, content]); // Trigger when Lang OR Content changes
+        }, [viewLang, content]); // Trigger when Lang OR Content changes
 
     const loadNotebooks = async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -380,13 +353,10 @@ const StoryMode: React.FC<StoryModeProps> = ({ notebookId }) => {
             // Translate the clicked word from [CurrentLang] to TR
             let src = viewLang === 'original' ? 'en' : viewLang;
             if (viewLang === 'tr') src = 'tr'; // if viewing in TR, maybe translate to EN?
-            const pair = src === 'tr' ? 'tr|en' : `${src}|tr`;
 
-            const res = await fetch(`https://api.mymemory.translated.net/get?q=${popover.text}&langpair=${pair}`);
-            const data = await res.json();
-            if (data.responseData.translatedText) {
-                setTranslation(data.responseData.translatedText);
-            }
+            // Use TranslationService
+            const translated = await TranslationService.translate(popover.text, 'tr', src === 'tr' ? 'tr' : src);
+            setTranslation(translated);
         } catch (e) {
             setTranslation('Hata.');
         }
