@@ -42,6 +42,20 @@ export const TranslationService = {
             }
         } catch (e) { console.warn('CodeTabs/Clients5 failed'); }
 
+        // --- 2.5 GOOGLE via THINGPROXY (Another Robust Fallback) ---
+        try {
+            console.log('[TranslationService] Trying Strategy 2.5: Google via ThingProxy');
+            const gUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&q=${encodeURIComponent(text)}`;
+            const proxyUrl = `https://thingproxy.freeboard.io/fetch/${gUrl}`;
+            const res = await this.fetchWithTimeout(proxyUrl, 4000);
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data?.[0])) {
+                    return data[0].map((s: any) => Array.isArray(s) ? s[0] : '').join('');
+                }
+            }
+        } catch (e) { console.warn('ThingProxy failed'); }
+
         // --- 3. GOOGLE via CORSPROXY.IO ---
         try {
             console.log('[TranslationService] Trying Strategy 3: CorsProxy.io');
