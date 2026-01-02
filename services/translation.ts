@@ -16,9 +16,19 @@ export const TranslationService = {
 
         if (sLang === tLang && sLang !== 'auto') return text;
 
-        // --- 1. LINGVA (Best for Privacy & Speed if up) ---
+        // --- 1. LOCAL VERCEL API (Fastest & Most Reliable - No CORS) ---
         try {
-            console.log('[TranslationService] Trying Strategy 1: Lingva');
+            console.log('[TranslationService] Trying Strategy 1: Local /api/translate');
+            const res = await this.fetchWithTimeout(`/api/translate?text=${encodeURIComponent(text)}&source=${sLang}&target=${tLang}`, 4000);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.translation) return data.translation;
+            }
+        } catch (e) { console.warn('Local API failed', e); }
+
+        // --- 2. LINGVA (Best for Privacy & Speed if up) ---
+        try {
+            console.log('[TranslationService] Trying Strategy 2: Lingva');
             const res = await this.fetchWithTimeout(`https://lingva.ml/api/v1/${sLang}/${tLang}/${encodeURIComponent(text)}`, 2500);
             if (res.ok) {
                 const data = await res.json();
@@ -26,51 +36,19 @@ export const TranslationService = {
             }
         } catch (e) { console.warn('Lingva failed'); }
 
-        // --- 2. GOOGLE CLIENTS5 via CODITABS (New Robust Strategy) ---
-        // often works when others don't
+        // --- 3. GOOGLE CLIENTS5 via CODITABS (Fallback) ---
         try {
-            console.log('[TranslationService] Trying Strategy 2: Google Clients5 via CodeTabs');
+            console.log('[TranslationService] Trying Strategy 3: Google Clients5 via CodeTabs');
             const gUrl = `https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=${sLang}&tl=${tLang}&q=${encodeURIComponent(text)}`;
             const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(gUrl)}`;
             const res = await this.fetchWithTimeout(proxyUrl, 4000);
             if (res.ok) {
                 const data = await res.json();
-                // clients5 returns nested array [[["translated"]]]
                 if (Array.isArray(data?.[0]) && data[0][0]) {
                     return data[0][0];
                 }
             }
-        } catch (e) { console.warn('CodeTabs/Clients5 failed'); }
-
-        // --- 2.5 GOOGLE via THINGPROXY (Another Robust Fallback) ---
-        try {
-            console.log('[TranslationService] Trying Strategy 2.5: Google via ThingProxy');
-            const gUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&q=${encodeURIComponent(text)}`;
-            const proxyUrl = `https://thingproxy.freeboard.io/fetch/${gUrl}`;
-            const res = await this.fetchWithTimeout(proxyUrl, 4000);
-            if (res.ok) {
-                const data = await res.json();
-                if (Array.isArray(data?.[0])) {
-                    return data[0].map((s: any) => Array.isArray(s) ? s[0] : '').join('');
-                }
-            }
-        } catch (e) { console.warn('ThingProxy failed'); }
-
-        // --- 3. GOOGLE via CORSPROXY.IO ---
-        try {
-            console.log('[TranslationService] Trying Strategy 3: CorsProxy.io');
-            const gUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&q=${encodeURIComponent(text)}`;
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(gUrl)}`;
-            const res = await this.fetchWithTimeout(proxyUrl, 4000);
-            if (res.ok) {
-                const data = await res.json();
-                if (Array.isArray(data?.[0])) {
-                    return data[0].map((s: any) => Array.isArray(s) ? s[0] : '').join('');
-                }
-            }
-        } catch (e) {
-            console.warn('CorsProxy failed');
-        }
+        } catch (e) { console.warn('CodeTabs failed'); }
 
         // --- 4. GOOGLE via ALLORIGINS ---
         try {
