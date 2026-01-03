@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StorageService } from '../services/storage';
 import { PDFBook, AccessKey, Collection } from '../types';
 import { QuestionParser } from '../utils/QuestionParser';
-import { QuizService } from '../services/db';
+import { QuizService, DBService } from '../services/db';
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -110,14 +110,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   };
 
   const refreshUsers = async () => {
-    setUsers(await import('../services/db').then(m => m.DBService.getAllUsers()));
+    setUsers(await DBService.getAllUsers());
   }
 
 
   const handleOpenPermModal = async (user: import('../types').UserProfile) => {
     setSelectedUser(user);
     // Fetch existing perms
-    const perms = await import('../services/db').then(m => m.DBService.getUserPermissions(user.id));
+    const perms = await DBService.getUserPermissions(user.id);
 
     if (perms) {
       setPermFolderIds(perms.folderIds);
@@ -138,14 +138,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const handleSavePermissions = async () => {
     if (!selectedUser) return;
     try {
-      const { error } = await import('../services/db').then(m => m.DBService.updateUserPermission(
+      const { error } = await DBService.updateUserPermission(
         selectedUser.id,
         permFolderIds,
         permFileIds,
         permCanPrint,
         permExpiresAt ? new Date(permExpiresAt).toISOString() : null,
         permPrintLimits
-      )) as any;
+      ) as any;
 
       if (error) {
         console.error("Supabase Update Error:", error);
@@ -160,31 +160,31 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
   const handleOpenDeviceModal = async (user: import('../types').UserProfile) => {
     setSelectedUser(user);
-    const devices = await import('../services/db').then(m => m.DBService.getUserDevices(user.id));
+    const devices = await DBService.getUserDevices(user.id);
     setUserDevices(devices);
     setDeviceModalOpen(true);
   };
 
   const handleToggleDevice = async (deviceId: string, currentStatus: boolean) => {
-    await import('../services/db').then(m => m.DBService.toggleDeviceApproval(deviceId, !currentStatus));
+    await DBService.toggleDeviceApproval(deviceId, !currentStatus);
     if (selectedUser) {
-      const devices = await import('../services/db').then(m => m.DBService.getUserDevices(selectedUser.id));
+      const devices = await DBService.getUserDevices(selectedUser.id);
       setUserDevices(devices);
     }
   };
 
   const handleDeleteDevice = async (deviceId: string) => {
     if (!confirm("Cihaz silinsin mi?")) return;
-    await import('../services/db').then(m => m.DBService.deleteDevice(deviceId));
+    await DBService.deleteDevice(deviceId);
     if (selectedUser) {
-      const devices = await import('../services/db').then(m => m.DBService.getUserDevices(selectedUser.id));
+      const devices = await DBService.getUserDevices(selectedUser.id);
       setUserDevices(devices);
     }
   };
 
   const loadLogs = async () => {
     setIsLoading(true);
-    setActivityLogs(await import('../services/db').then(m => m.DBService.getActivityLogs()));
+    setActivityLogs(await DBService.getActivityLogs());
     setIsLoading(false);
   };
 
