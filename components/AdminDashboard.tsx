@@ -302,29 +302,44 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
     setIsLoading(true);
     try {
-      let contentData = newItemUrl;
       if (newItemType === 'pdf' && newItemFile) {
-        // Need base64
         const reader = new FileReader();
-        reader.readAsDataURL(newItemFile);
-        await new Promise((resolve) => {
+
+        // Wrap FileReader in a promise for better async/await handling
+        await new Promise((resolve, reject) => {
           reader.onload = async (event) => {
-            const base64 = event.target?.result as string;
-            await StorageService.addFolderItem(activeFolderId, 'pdf', newItemTitle, base64);
-            resolve(true);
-          }
+            try {
+              const base64 = event.target?.result as string;
+              if (!base64) {
+                reject(new Error("Dosya okunamadı."));
+                return;
+              }
+              await StorageService.addFolderItem(activeFolderId, 'pdf', newItemTitle, base64);
+              resolve(true);
+            } catch (err) {
+              reject(err);
+            }
+          };
+          reader.onerror = () => reject(new Error("Dosya okuma hatası."));
+          reader.readAsDataURL(newItemFile);
         });
       } else {
         await StorageService.addFolderItem(activeFolderId, 'link', newItemTitle, newItemUrl);
       }
 
-      setNewItemTitle(''); setNewItemFile(null); setNewItemUrl('');
+      setNewItemTitle('');
+      setNewItemFile(null);
+      setNewItemUrl('');
+      // Reset file input if it exists
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+
       // Refresh active folder
       setFolderContents(await StorageService.getFolderContent(activeFolderId));
-      alert('İçerik eklendi.');
-    } catch (err) {
-      console.error(err);
-      alert('Hata');
+      alert('İçerik başarıyla eklendi.');
+    } catch (err: any) {
+      console.error("Add Item Error:", err);
+      alert(`Hata oluştu: ${err.message || 'Bilinmeyen bir hata.'}`);
     } finally {
       setIsLoading(false);
     }

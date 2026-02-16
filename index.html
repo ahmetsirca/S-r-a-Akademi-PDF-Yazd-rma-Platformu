@@ -18,6 +18,17 @@
   ">
   <title>SIRÇA AKADEMİ(KOMİSERİM PAEMİSYON)</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style type="text/tailwindcss">
+    @layer utilities {
+      @keyframes scale-in {
+        0% { opacity: 0; transform: translate(-50%, -90%) scale(0.95); }
+        100% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+      }
+      .animate-scale-in {
+        animation: scale-in 0.2s ease-out forwards;
+      }
+    }
+  </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 

@@ -11,6 +11,8 @@ pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 import { DBService } from '../services/db';
 import { AuthService } from '../services/auth';
+import { TranslationService } from '../services/translation';
+import { supabase } from '../services/supabase';
 
 
 // Types for Annotation
@@ -281,6 +283,15 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   const [searchResults, setSearchResults] = useState<number[]>([]); // Page numbers
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
+  const [lastSavedPage, setLastSavedPage] = useState(1);
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  // Selection Popover State
+  const [popover, setPopover] = useState<{ x: number, y: number, text: string } | null>(null);
+  const [translationText, setTranslationText] = useState<string | null>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [notebooks, setNotebooks] = useState<{ id: string, title: string }[]>([]);
+  const [targetNotebookId, setTargetNotebookId] = useState<string>('');
 
   // --- PAGE JUMP STATE ---
   const [isJumpOpen, setIsJumpOpen] = useState(false);
@@ -504,13 +515,90 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
   const handleJumpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const p = parseInt(jumpTarget);
-    if (!isNaN(p) && p >= 1 && p <= (numPages || 1)) {
+    const target = parseInt(jumpTarget);
+    if (!isNaN(target) && target >= 1 && target <= (numPages || 1)) {
+      setCurrentPage(target);
       setIsJumpOpen(false);
-      setJumpTarget("");
-      jumpToPage(p);
+      jumpToPage(target);
     } else {
       alert("Geçersiz sayfa numarası.");
+    }
+  };
+
+  // --- SELECTION & VOCAB LOGIC ---
+  useEffect(() => {
+    const fetchNotebooks = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const nbs = await DBService.getNotebooks(user.id);
+          setNotebooks(nbs);
+          if (nbs.length > 0) setTargetNotebookId(nbs[0].id);
+        }
+      } catch (e) { console.error("Error fetching notebooks:", e); }
+    };
+    fetchNotebooks();
+  }, []);
+
+  const handleMouseUp = () => {
+    if (toolMode !== 'CURSOR') return;
+
+    // Use timeout to allow selection to finalize
+    setTimeout(() => {
+      const selection = window.getSelection();
+      if (!selection) return;
+
+      const text = selection.toString().trim();
+      if (text && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+
+        setPopover({
+          x: rect.left + rect.width / 2,
+          y: rect.top,
+          text
+        });
+        setTranslationText(null);
+      } else {
+        // Only close if not clicking the popover itself
+        const hasPopoverSelection = !!document.getElementById('selection-popover');
+        if (!hasPopoverSelection) setPopover(null);
+      }
+    }, 50);
+  };
+
+  const handleTranslateWord = async () => {
+    if (!popover || isTranslating) return;
+    setIsTranslating(true);
+    try {
+      const translated = await TranslationService.translate(popover.text, 'tr', 'en');
+      setTranslationText(translated);
+    } catch (e) {
+      setTranslationText("Çeviri hatası.");
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  const handleAddWordToVocab = async () => {
+    if (!popover) return;
+    if (!targetNotebookId) {
+      alert("Lütfen önce bir kelime defteri seçin.");
+      return;
+    }
+    try {
+      await DBService.addNotebookWord(targetNotebookId, popover.text, translationText || '');
+      alert("Kelime defterine eklendi!");
+      setPopover(null);
+    } catch (e: any) {
+      alert(`Hata: ${e.message}`);
+    }
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      handleZoom(e.deltaY > 0 ? -0.1 : 0.1);
     }
   };
 
@@ -719,15 +807,6 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     setScale(prev => Math.min(Math.max(0.5, prev + delta), 3.0));
   };
 
-  const handleWheel = (e: React.WheelEvent) => {
-    // Zoom on Ctrl + Wheel
-    if (e.ctrlKey) {
-      if (e.deltaY < 0) handleZoom(0.1);
-      else handleZoom(-0.1);
-      return;
-    }
-  };
-
   const [isPrinting, setIsPrinting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
@@ -875,8 +954,9 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
   return (
     <div
-      className={`fixed top-0 left-0 w-full h-[100dvh] bg-slate-900 flex flex-col z-50 select-none ${!isFocused ? 'blur-xl' : ''}`}
+      className={`fixed top-0 left-0 w-full h-[100dvh] bg-slate-900 flex flex-col z-50 ${!isFocused ? 'blur-xl' : ''}`}
       onContextMenu={(e) => e.preventDefault()}
+      onMouseUp={handleMouseUp}
     >
       {/* Sidebar Toolbar - Desktop */}
       <div className={`absolute top-1/2 left-4 md:flex flex-col gap-2 bg-slate-800 border border-slate-600 rounded-xl p-2 hidden transform -translate-y-1/2 shadow-2xl z-[60] transition-opacity duration-300 ${showControls ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
@@ -1180,6 +1260,70 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
             <h3 className="text-xl font-bold mb-4">Yazdırıldı</h3>
             <button onClick={onExit} className="bg-slate-900 text-white px-6 py-2 rounded">Tamam</button>
           </div>
+        </div>
+      )}
+
+      {/* Selection Popover */}
+      {popover && (
+        <div
+          id="selection-popover"
+          className="fixed z-[1000] bg-white rounded-lg shadow-2xl border border-slate-200 p-3 flex flex-col gap-2 min-w-[200px] animate-scale-in"
+          style={{
+            left: `${popover.x}px`,
+            top: `${popover.y - 10}px`,
+            transform: 'translate(-50%, -100%)'
+          }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-1">
+            <span className="font-bold text-slate-800 truncate max-w-[150px]">{popover.text}</span>
+            <button onClick={() => setPopover(null)} className="text-slate-400 hover:text-slate-600 ml-2">
+              <i className="fas fa-times"></i>
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handleTranslateWord}
+              disabled={isTranslating}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 py-2 rounded text-sm font-bold flex items-center justify-center gap-2 transition"
+            >
+              {isTranslating ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-language"></i>}
+              Çevir
+            </button>
+
+            {translationText && (
+              <div className="p-2 bg-slate-50 rounded border border-slate-100 text-sm text-slate-700 leading-tight">
+                {translationText}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-1 mt-1">
+              <label className="text-[10px] uppercase text-slate-400 font-bold">Hedef Defter</label>
+              <select
+                className="text-xs p-1 border border-slate-200 rounded bg-white"
+                value={targetNotebookId}
+                onChange={(e) => setTargetNotebookId(e.target.value)}
+              >
+                {notebooks.length > 0 ? (
+                  notebooks.map(nb => <option key={nb.id} value={nb.id}>{nb.title}</option>)
+                ) : (
+                  <option value="">Defter Yok</option>
+                )}
+              </select>
+            </div>
+
+            <button
+              onClick={handleAddWordToVocab}
+              className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm font-bold flex items-center justify-center gap-2 transition"
+            >
+              <i className="fas fa-plus"></i>
+              Deftere Ekle
+            </button>
+          </div>
+
+          {/* Arrow */}
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-white"></div>
         </div>
       )}
     </div>
