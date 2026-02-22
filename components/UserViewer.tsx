@@ -1274,10 +1274,11 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
             transform: 'translate(-50%, -100%)'
           }}
           onMouseDown={e => e.stopPropagation()}
+          onMouseUp={e => e.stopPropagation()}
         >
           <div className="flex items-start justify-between border-b border-slate-100 pb-2 mb-1 gap-4">
             <span className="font-bold text-slate-800 text-sm max-h-20 overflow-y-auto w-full leading-tight pr-2">{popover.text}</span>
-            <button onClick={() => setPopover(null)} className="text-slate-400 hover:text-slate-600 shrink-0">
+            <button onClick={() => { window.getSelection()?.removeAllRanges(); setPopover(null); }} className="text-slate-400 hover:text-slate-600 shrink-0">
               <i className="fas fa-times"></i>
             </button>
           </div>
