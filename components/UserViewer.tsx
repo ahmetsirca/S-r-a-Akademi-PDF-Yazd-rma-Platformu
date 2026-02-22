@@ -292,6 +292,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   const [isTranslating, setIsTranslating] = useState(false);
   const [notebooks, setNotebooks] = useState<{ id: string, title: string }[]>([]);
   const [targetNotebookId, setTargetNotebookId] = useState<string>('');
+  const [targetLang, setTargetLang] = useState('tr');
 
   // --- PAGE JUMP STATE ---
   const [isJumpOpen, setIsJumpOpen] = useState(false);
@@ -571,7 +572,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     if (!popover || isTranslating) return;
     setIsTranslating(true);
     try {
-      const translated = await TranslationService.translate(popover.text, 'tr', 'en');
+      const translated = await TranslationService.translate(popover.text, targetLang, 'auto');
       setTranslationText(translated);
     } catch (e) {
       setTranslationText("Çeviri hatası.");
@@ -1284,14 +1285,25 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
           </div>
 
           <div className="flex flex-col gap-2">
-            <button
-              onClick={handleTranslateWord}
-              disabled={isTranslating}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 py-2 rounded text-sm font-bold flex items-center justify-center gap-2 transition"
-            >
-              {isTranslating ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-language"></i>}
-              Çevir
-            </button>
+            <div className="flex gap-2 w-full">
+              <select
+                className="border border-slate-200 rounded p-1 text-xs shrink-0 bg-slate-50 font-bold text-slate-700"
+                value={targetLang}
+                onChange={(e) => setTargetLang(e.target.value)}
+              >
+                <option value="tr">TR'ye</option>
+                <option value="en">EN'ye</option>
+                <option value="de">DE'ye</option>
+              </select>
+              <button
+                onClick={handleTranslateWord}
+                disabled={isTranslating}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 py-2 rounded text-sm font-bold flex-1 flex items-center justify-center gap-2 transition"
+              >
+                {isTranslating ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-language"></i>}
+                Çevir
+              </button>
+            </div>
 
             {translationText && (
               <div className="p-2 bg-slate-50 rounded border border-slate-100 text-sm text-slate-700 leading-tight max-h-32 overflow-y-auto">
