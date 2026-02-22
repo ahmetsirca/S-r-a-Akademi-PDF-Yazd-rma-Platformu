@@ -287,7 +287,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   const [isInitializing, setIsInitializing] = useState(true);
 
   // Selection Popover State
-  const [popover, setPopover] = useState<{ x: number, y: number, text: string } | null>(null);
+  const [popover, setPopover] = useState<{ x: number, y: number, text: string, isFlipped?: boolean } | null>(null);
   const [translationText, setTranslationText] = useState<string | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const [notebooks, setNotebooks] = useState<{ id: string, title: string }[]>([]);
@@ -563,10 +563,14 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
         // Ensure valid visual selection (prevents invisible ghost selections)
         if (rect.width > 0 && rect.height > 0) {
+          // Smart positioning: if too close to the top, flip the popover below the text
+          const isFlipped = rect.top < 180;
+
           setPopover({
             x: rect.left + rect.width / 2,
-            y: Math.max(rect.top, 50), // Don't let it overlap too far off screen
-            text
+            y: isFlipped ? rect.bottom + 10 : Math.max(rect.top, 50),
+            text,
+            isFlipped
           });
           setTranslationText(null);
         }
@@ -1282,8 +1286,9 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
           className="fixed z-[1000] bg-white rounded-lg shadow-2xl border border-slate-200 p-3 flex flex-col gap-2 min-w-[250px] max-w-[350px] animate-scale-in"
           style={{
             left: `${popover.x}px`,
-            top: `${popover.y - 10}px`,
-            transform: 'translate(-50%, -100%)'
+            top: `${popover.y}px`,
+            transform: popover.isFlipped ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
+            marginTop: popover.isFlipped ? '0' : '-10px'
           }}
           onMouseDown={e => e.stopPropagation()}
           onMouseUp={e => e.stopPropagation()}

@@ -19,7 +19,7 @@ export const TranslationService = {
         // --- 1. LOCAL VERCEL API (Fastest & Most Reliable - No CORS) ---
         try {
             console.log('[TranslationService] Trying Strategy 1: Local /api/translate');
-            const res = await this.fetchWithTimeout(`/api/translate?text=${encodeURIComponent(text)}&source=${sLang}&target=${tLang}`, 4000);
+            const res = await this.fetchWithTimeout(`/api/translate?text=${encodeURIComponent(text)}&source=${sLang}&target=${tLang}`, 2500);
             if (res.ok) {
                 const data = await res.json();
                 if (data.translation) return data.translation;
@@ -29,7 +29,7 @@ export const TranslationService = {
         // --- 2. LINGVA (Best for Privacy & Speed if up) ---
         try {
             console.log('[TranslationService] Trying Strategy 2: Lingva');
-            const res = await this.fetchWithTimeout(`https://lingva.ml/api/v1/${sLang}/${tLang}/${encodeURIComponent(text)}`, 2500);
+            const res = await this.fetchWithTimeout(`https://lingva.ml/api/v1/${sLang}/${tLang}/${encodeURIComponent(text)}`, 1500);
             if (res.ok) {
                 const data = await res.json();
                 if (data.translation) return data.translation;
@@ -41,7 +41,7 @@ export const TranslationService = {
             console.log('[TranslationService] Trying Strategy 3: Google Clients5 via CodeTabs');
             const gUrl = `https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=${sLang}&tl=${tLang}&q=${encodeURIComponent(text)}`;
             const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(gUrl)}`;
-            const res = await this.fetchWithTimeout(proxyUrl, 4000);
+            const res = await this.fetchWithTimeout(proxyUrl, 2500);
             if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data?.[0]) && data[0][0]) {
@@ -55,7 +55,7 @@ export const TranslationService = {
             console.log('[TranslationService] Trying Strategy 4: AllOrigins');
             const gUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sLang}&tl=${tLang}&dt=t&q=${encodeURIComponent(text)}`;
             const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(gUrl)}`;
-            const res = await this.fetchWithTimeout(proxyUrl, 5000);
+            const res = await this.fetchWithTimeout(proxyUrl, 3000);
             if (res.ok) {
                 const wrapper = await res.json();
                 if (wrapper.contents) {
