@@ -541,32 +541,44 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     fetchNotebooks();
   }, []);
 
-  const handleMouseUp = () => {
-    if (toolMode !== 'CURSOR') return;
+  // Global Text Selection Listener (Mobile + Desktop Support)
+  useEffect(() => {
+    let timeoutId: any;
+    const handleSelectionChange = () => {
+      if (toolMode !== 'CURSOR') return;
 
-    // Use timeout to allow selection to finalize
-    setTimeout(() => {
-      const selection = window.getSelection();
-      if (!selection) return;
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0 || selection.toString().trim() === '') {
+          // Keep popover open if we are just interacting with it
+          const hasPopoverSelection = !!document.getElementById('selection-popover');
+          if (!hasPopoverSelection) setPopover(null);
+          return;
+        }
 
-      const text = selection.toString().trim();
-      if (text && selection.rangeCount > 0) {
+        const text = selection.toString().trim();
         const range = selection.getRangeAt(0);
         const rect = range.getBoundingClientRect();
 
-        setPopover({
-          x: rect.left + rect.width / 2,
-          y: rect.top,
-          text
-        });
-        setTranslationText(null);
-      } else {
-        // Only close if not clicking the popover itself
-        const hasPopoverSelection = !!document.getElementById('selection-popover');
-        if (!hasPopoverSelection) setPopover(null);
-      }
-    }, 50);
-  };
+        // Ensure valid visual selection (prevents invisible ghost selections)
+        if (rect.width > 0 && rect.height > 0) {
+          setPopover({
+            x: rect.left + rect.width / 2,
+            y: Math.max(rect.top, 50), // Don't let it overlap too far off screen
+            text
+          });
+          setTranslationText(null);
+        }
+      }, 500); // 500ms debounce ensures touch slide dragging is finished before firing
+    };
+
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChange);
+      clearTimeout(timeoutId);
+    };
+  }, [toolMode]);
 
   const handleTranslateWord = async () => {
     if (!popover || isTranslating) return;
@@ -957,7 +969,6 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     <div
       className={`fixed top-0 left-0 w-full h-[100dvh] bg-slate-900 flex flex-col z-50 ${!isFocused ? 'blur-xl' : ''}`}
       onContextMenu={(e) => e.preventDefault()}
-      onMouseUp={handleMouseUp}
     >
       {/* Sidebar Toolbar - Desktop */}
       <div className={`absolute top-1/2 left-4 md:flex flex-col gap-2 bg-slate-800 border border-slate-600 rounded-xl p-2 hidden transform -translate-y-1/2 shadow-2xl z-[60] transition-opacity duration-300 ${showControls ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
@@ -1123,8 +1134,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
               >
                 {numPages && Array.from(new Array(numPages)).map((_, index) => {
                   const pageNum = index + 1;
-                  // Virtualization: Window size 10 to ensure pages are always ready
-                  const isVisible = Math.abs(pageNum - currentPage) <= 10;
+                  // Virtualization: Window size 2 to drastically improve mobile RAM/GPU limits and page load speed
+                  const isVisible = Math.abs(pageNum - currentPage) <= 2;
 
                   // Height Logic: pageHeights has High-Res Height. Convert to Visual.
                   const highResHeight = pageHeights[pageNum];
@@ -1276,6 +1287,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
           }}
           onMouseDown={e => e.stopPropagation()}
           onMouseUp={e => e.stopPropagation()}
+          onTouchStart={e => e.stopPropagation()}
+          onTouchEnd={e => e.stopPropagation()}
         >
           <div className="flex items-start justify-between border-b border-slate-100 pb-2 mb-1 gap-4">
             <span className="font-bold text-slate-800 text-sm max-h-20 overflow-y-auto w-full leading-tight pr-2">{popover.text}</span>
