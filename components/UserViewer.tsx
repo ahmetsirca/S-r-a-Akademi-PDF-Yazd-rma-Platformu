@@ -1144,11 +1144,12 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         onWheel={handleWheel}
         onScroll={handleScroll}
         onClick={handleContentClick}
-        onMouseDown={handleSelectionStart}
-        onMouseUp={handleSelectionEnd}
-        onTouchStart={(e) => { onTouchStart(e); handleSelectionStart(); }}
+        onPointerDown={handleSelectionStart}
+        onPointerUp={handleSelectionEnd}
+        onPointerCancel={handleSelectionEnd}
+        onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
-        onTouchEnd={(e) => { onTouchEnd(); handleSelectionEnd(); }}
+        onTouchEnd={onTouchEnd}
       >
         <div ref={contentRef} className="flex flex-col min-w-full items-stretch transition-transform duration-75 origin-top-left"> {/* Inner Wrapper for Transform */}
           {!isFocused && <div className="fixed inset-0 z-[100] bg-black/50 text-white flex items-center justify-center text-2xl font-bold">Odaklanın</div>}
