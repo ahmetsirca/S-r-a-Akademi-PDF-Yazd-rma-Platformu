@@ -542,47 +542,95 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   }, []);
 
   // Global Text Selection Listener (Mobile + Desktop Support)
+  const isSelecting = useRef(false);
+  const selectionQueued = useRef(false);
+
+  // 1. Mark when user STARTS interacting with PDF content (mouse down or touch start)
+  const handleSelectionStart = () => {
+    if (toolMode !== 'CURSOR') return;
+    isSelecting.current = true;
+    selectionQueued.current = false;
+    // Don't close popover yet, let the user maybe click inside it. 
+    // If they click outside, the native selection will clear and we catch it below.
+  };
+
+  // 2. Track changes. If 'isSelecting' is true, we ONLY Queue it to avoid flickering.
   useEffect(() => {
-    let timeoutId: any;
     const handleSelectionChange = () => {
       if (toolMode !== 'CURSOR') return;
 
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => {
-        const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0 || selection.toString().trim() === '') {
-          // Keep popover open if we are just interacting with it
-          const hasPopoverSelection = !!document.getElementById('selection-popover');
-          if (!hasPopoverSelection) setPopover(null);
-          return;
-        }
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0 || selection.toString().trim() === '') {
+        const hasPopoverSelection = !!document.getElementById('selection-popover');
+        if (!hasPopoverSelection) setPopover(null);
+        selectionQueued.current = false;
+        return;
+      }
 
-        const text = selection.toString().trim();
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-
-        // Ensure valid visual selection (prevents invisible ghost selections)
-        if (rect.width > 0 && rect.height > 0) {
-          // Smart positioning: if too close to the top, flip the popover below the text
-          const isFlipped = rect.top < 180;
-
-          setPopover({
-            x: rect.left + rect.width / 2,
-            y: isFlipped ? rect.bottom + 10 : Math.max(rect.top, 50),
-            text,
-            isFlipped
-          });
-          setTranslationText(null);
-        }
-      }, 500); // 500ms debounce ensures touch slide dragging is finished before firing
+      if (isSelecting.current) {
+        selectionQueued.current = true; // Wait until drag is done
+      } else {
+        // If selection changed without an active pointer drag (e.g. keyboard shift+arrow)
+        finalizeSelection();
+      }
     };
 
     document.addEventListener('selectionchange', handleSelectionChange);
-    return () => {
-      document.removeEventListener('selectionchange', handleSelectionChange);
-      clearTimeout(timeoutId);
-    };
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
   }, [toolMode]);
+
+  // 3. Mark when user STOPS interacting. Fire the queued selection.
+  const handleSelectionEnd = () => {
+    if (toolMode !== 'CURSOR') return;
+    isSelecting.current = false;
+
+    // Slight delay to ensure native DOM selection finishes updating on TouchEnd
+    setTimeout(() => {
+      if (selectionQueued.current) {
+        finalizeSelection();
+        selectionQueued.current = false;
+      }
+    }, 50);
+  };
+
+  // 4. The actual rendering logic using getClientRects for multi-line precision
+  const finalizeSelection = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    const text = selection.toString().trim();
+    if (!text) return;
+
+    const range = selection.getRangeAt(0);
+    const rects = range.getClientRects();
+
+    if (rects.length > 0) {
+      // For multi-line text, getBoundingClientRect returns a giant box spanning from the start of line 1 
+      // to the end of line N, placing the center point in the middle of the paragraph.
+      // INSTEAD, we take the FIRST line's box (rects[0]) if it's near the top, or LAST if we put it at the bottom.
+
+      const firstLineRect = rects[0];
+      const lastLineRect = rects[rects.length - 1];
+
+      // Default: anchor to the first line's top
+      let anchorRect = firstLineRect;
+
+      const isFlipped = anchorRect.top < 180;
+
+      if (isFlipped) {
+        // If flipped, anchor to the LAST line's bottom so it doesn't overlap the text
+        anchorRect = lastLineRect;
+      }
+
+      setPopover({
+        x: anchorRect.left + anchorRect.width / 2,
+        y: isFlipped ? anchorRect.bottom + 10 : Math.max(anchorRect.top, 50),
+        text,
+        isFlipped
+      });
+      setTranslationText(null);
+    }
+  };
 
   const handleTranslateWord = async () => {
     if (!popover || isTranslating) return;
@@ -1096,9 +1144,11 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         onWheel={handleWheel}
         onScroll={handleScroll}
         onClick={handleContentClick}
-        onTouchStart={onTouchStart}
+        onMouseDown={handleSelectionStart}
+        onMouseUp={handleSelectionEnd}
+        onTouchStart={(e) => { onTouchStart(e); handleSelectionStart(); }}
         onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
+        onTouchEnd={(e) => { onTouchEnd(); handleSelectionEnd(); }}
       >
         <div ref={contentRef} className="flex flex-col min-w-full items-stretch transition-transform duration-75 origin-top-left"> {/* Inner Wrapper for Transform */}
           {!isFocused && <div className="fixed inset-0 z-[100] bg-black/50 text-white flex items-center justify-center text-2xl font-bold">Odaklanın</div>}
