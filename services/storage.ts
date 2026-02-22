@@ -34,13 +34,22 @@ export const StorageService = {
     }));
   },
 
-  saveBook: async (book: Omit<PDFBook, 'id' | 'createdAt'>) => {
+  saveBook: async (book: Omit<PDFBook, 'id' | 'createdAt'> & { file?: File }) => {
     let filePath = book.sourceUrl || '';
 
-    // If it's a FILE upload (Base64 data coming from UI)
-    if (book.sourceType === 'FILE' && book.pdfData && book.pdfData.startsWith('data:')) {
-      const base64Response = await fetch(book.pdfData);
-      const blob = await base64Response.blob();
+    // If it's a FILE upload
+    if (book.sourceType === 'FILE') {
+      let blob: Blob;
+
+      if (book.file) {
+        blob = book.file;
+      } else if (book.pdfData && book.pdfData.startsWith('data:')) {
+        // Fallback for old base64
+        const base64Response = await fetch(book.pdfData);
+        blob = await base64Response.blob();
+      } else {
+        throw new Error("Geçerli bir dosya bulunamadı.");
+      }
 
       // Sanitized filename
       const safeName = book.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
@@ -209,13 +218,21 @@ export const StorageService = {
     }));
   },
 
-  addFolderItem: async (folderId: string, type: 'pdf' | 'link', title: string, fileDataOrUrl: string) => {
-    let finalUrl = fileDataOrUrl;
+  addFolderItem: async (folderId: string, type: 'pdf' | 'link', title: string, fileDataOrUrl: string | File) => {
+    let finalUrl = typeof fileDataOrUrl === 'string' ? fileDataOrUrl : '';
 
-    if (type === 'pdf' && fileDataOrUrl.startsWith('data:')) {
-      // Upload PDF
-      const base64Response = await fetch(fileDataOrUrl);
-      const blob = await base64Response.blob();
+    if (type === 'pdf') {
+      let blob: Blob;
+
+      if (fileDataOrUrl instanceof File) {
+        blob = fileDataOrUrl;
+      } else if (typeof fileDataOrUrl === 'string' && fileDataOrUrl.startsWith('data:')) {
+        const base64Response = await fetch(fileDataOrUrl);
+        blob = await base64Response.blob();
+      } else {
+        throw new Error("Geçerli bir dosya bulunamadı.");
+      }
+
       const safeName = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
       const fileName = `folder_content/${Date.now()}_${safeName}.pdf`;
 

@@ -529,9 +529,9 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   useEffect(() => {
     const fetchNotebooks = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const nbs = await DBService.getNotebooks(user.id);
+        const sess = AuthService.loadSession();
+        if (sess) {
+          const nbs = await DBService.getNotebooks(sess.id);
           setNotebooks(nbs);
           if (nbs.length > 0) setTargetNotebookId(nbs[0].id);
         }
@@ -1267,7 +1267,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       {popover && (
         <div
           id="selection-popover"
-          className="fixed z-[1000] bg-white rounded-lg shadow-2xl border border-slate-200 p-3 flex flex-col gap-2 min-w-[200px] animate-scale-in"
+          className="fixed z-[1000] bg-white rounded-lg shadow-2xl border border-slate-200 p-3 flex flex-col gap-2 min-w-[250px] max-w-[350px] animate-scale-in"
           style={{
             left: `${popover.x}px`,
             top: `${popover.y - 10}px`,
@@ -1275,9 +1275,9 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
           }}
           onMouseDown={e => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-1">
-            <span className="font-bold text-slate-800 truncate max-w-[150px]">{popover.text}</span>
-            <button onClick={() => setPopover(null)} className="text-slate-400 hover:text-slate-600 ml-2">
+          <div className="flex items-start justify-between border-b border-slate-100 pb-2 mb-1 gap-4">
+            <span className="font-bold text-slate-800 text-sm max-h-20 overflow-y-auto w-full leading-tight pr-2">{popover.text}</span>
+            <button onClick={() => setPopover(null)} className="text-slate-400 hover:text-slate-600 shrink-0">
               <i className="fas fa-times"></i>
             </button>
           </div>
@@ -1293,7 +1293,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
             </button>
 
             {translationText && (
-              <div className="p-2 bg-slate-50 rounded border border-slate-100 text-sm text-slate-700 leading-tight">
+              <div className="p-2 bg-slate-50 rounded border border-slate-100 text-sm text-slate-700 leading-tight max-h-32 overflow-y-auto">
                 {translationText}
               </div>
             )}

@@ -225,12 +225,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     setIsLoading(true);
     try {
       if (activeTab === 'FILE' && bookFile) {
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-          const base64 = event.target?.result as string;
-          await saveBookAndRefresh({ name: newBookName, collectionId: selectedCol, pdfData: base64, sourceType: 'FILE' });
-        };
-        reader.readAsDataURL(bookFile);
+        await saveBookAndRefresh({ name: newBookName, collectionId: selectedCol, file: bookFile, sourceType: 'FILE' });
       } else {
         await saveBookAndRefresh({ name: newBookName, collectionId: selectedCol, sourceUrl: linkUrl, sourceType: 'LINK' });
       }
@@ -303,26 +298,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     setIsLoading(true);
     try {
       if (newItemType === 'pdf' && newItemFile) {
-        const reader = new FileReader();
-
-        // Wrap FileReader in a promise for better async/await handling
-        await new Promise((resolve, reject) => {
-          reader.onload = async (event) => {
-            try {
-              const base64 = event.target?.result as string;
-              if (!base64) {
-                reject(new Error("Dosya okunamadı."));
-                return;
-              }
-              await StorageService.addFolderItem(activeFolderId, 'pdf', newItemTitle, base64);
-              resolve(true);
-            } catch (err) {
-              reject(err);
-            }
-          };
-          reader.onerror = () => reject(new Error("Dosya okuma hatası."));
-          reader.readAsDataURL(newItemFile);
-        });
+        await StorageService.addFolderItem(activeFolderId, 'pdf', newItemTitle, newItemFile);
       } else {
         await StorageService.addFolderItem(activeFolderId, 'link', newItemTitle, newItemUrl);
       }
