@@ -269,7 +269,7 @@ const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({ userId, onClose
 
     return (
         <div className={`fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center ${isFullscreen ? 'p-0' : 'p-4'}`}>
-            <div className={`bg-slate-50 w-full ${isFullscreen ? 'h-full rounded-none' : 'max-w-6xl h-[85vh] rounded-3xl'} shadow-2xl flex flex-col md:flex-row overflow-hidden transition-all duration-300 animate-scale-in`}>
+            <div className={`bg-slate-50 w-full ${isFullscreen ? 'h-full rounded-none' : 'max-w-6xl h-[85vh] rounded-3xl'} shadow-2xl flex flex-col md:flex-row overflow-hidden transition-all duration-300 animate-zoom-in`}>
 
                 {/* Sidebar - Mobile Responsive: Top bar on mobile, Sidebar on desktop */}
                 <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 flex flex-row md:flex-col justify-between md:justify-start shrink-0">
