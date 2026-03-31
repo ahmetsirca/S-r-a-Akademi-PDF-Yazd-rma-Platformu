@@ -580,9 +580,13 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
       const selection = window.getSelection();
       if (!selection || selection.rangeCount === 0 || selection.toString().trim() === '') {
-        const hasPopoverSelection = !!document.getElementById('selection-popover');
-        if (!hasPopoverSelection) setPopover(null);
-        selectionQueued.current = false;
+        // Only CLEAR the popover if we aren't currently dragging or selecting
+        // This prevents the 'select-all' jump when clicking between words
+        if (!isSelecting.current) {
+          const hasPopoverSelection = !!document.getElementById('selection-popover');
+          if (!hasPopoverSelection) setPopover(null);
+          selectionQueued.current = false;
+        }
         return;
       }
 
@@ -618,7 +622,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     if (!selection || selection.rangeCount === 0) return;
 
     const text = selection.toString().trim();
-    if (!text) return;
+    if (!text || text.length < 2) return; // Ignore single chars/spaces to avoid flicker
 
     // Detection for mobile
     const isMobile = window.innerWidth < 640;
@@ -647,12 +651,8 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         const POPOVER_WIDTH = 320; // Estimated max width
         const padding = 20;
 
-        // Clamp X
-        if (x < (POPOVER_WIDTH / 2) + padding) {
-          x = (POPOVER_WIDTH / 2) + padding;
-        } else if (x > window.innerWidth - (POPOVER_WIDTH / 2) - padding) {
-          x = window.innerWidth - (POPOVER_WIDTH / 2) - padding;
-        }
+        // Clamp X to stay within screen
+        x = Math.max((POPOVER_WIDTH / 2) + padding, Math.min(x, window.innerWidth - (POPOVER_WIDTH / 2) - padding));
       }
 
       setPopover({
