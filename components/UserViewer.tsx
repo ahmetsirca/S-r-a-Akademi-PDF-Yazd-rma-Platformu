@@ -286,6 +286,13 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   const [lastSavedPage, setLastSavedPage] = useState(1);
   const [isInitializing, setIsInitializing] = useState(true);
 
+  // Update container width on resize
+  useEffect(() => {
+    const handleResize = () => setContainerWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Selection Popover State
   const [popover, setPopover] = useState<{ x: number, y: number, text: string, isFlipped?: boolean } | null>(null);
   const [translationText, setTranslationText] = useState<string | null>(null);
@@ -613,30 +620,44 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
     const text = selection.toString().trim();
     if (!text) return;
 
+    // Detection for mobile
+    const isMobile = window.innerWidth < 640;
+
     const range = selection.getRangeAt(0);
     const rects = range.getClientRects();
 
     if (rects.length > 0) {
-      // For multi-line text, getBoundingClientRect returns a giant box spanning from the start of line 1 
-      // to the end of line N, placing the center point in the middle of the paragraph.
-      // INSTEAD, we take the FIRST line's box (rects[0]) if it's near the top, or LAST if we put it at the bottom.
-
       const firstLineRect = rects[0];
       const lastLineRect = rects[rects.length - 1];
 
       // Default: anchor to the first line's top
       let anchorRect = firstLineRect;
-
-      const isFlipped = anchorRect.top < 180;
+      let isFlipped = anchorRect.top < 180;
 
       if (isFlipped) {
-        // If flipped, anchor to the LAST line's bottom so it doesn't overlap the text
         anchorRect = lastLineRect;
       }
 
+      // Calculate base coordinates
+      let x = anchorRect.left + anchorRect.width / 2;
+      let y = isFlipped ? anchorRect.bottom + 10 : Math.max(anchorRect.top, 50);
+
+      // --- VIEWPORT CLAMPING (for Desktop) ---
+      if (!isMobile) {
+        const POPOVER_WIDTH = 320; // Estimated max width
+        const padding = 20;
+
+        // Clamp X
+        if (x < (POPOVER_WIDTH / 2) + padding) {
+          x = (POPOVER_WIDTH / 2) + padding;
+        } else if (x > window.innerWidth - (POPOVER_WIDTH / 2) - padding) {
+          x = window.innerWidth - (POPOVER_WIDTH / 2) - padding;
+        }
+      }
+
       setPopover({
-        x: anchorRect.left + anchorRect.width / 2,
-        y: isFlipped ? anchorRect.bottom + 10 : Math.max(anchorRect.top, 50),
+        x: x,
+        y: y,
         text,
         isFlipped
       });
@@ -1388,82 +1409,128 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         </div>
       )}
 
-      {/* Selection Popover */}
+      {/* Selection Popover / Bottom Sheet */}
       {popover && (
-        <div
-          id="selection-popover"
-          className="fixed z-[1000] bg-white rounded-lg shadow-2xl border border-slate-200 p-3 flex flex-col gap-2 min-w-[250px] max-w-[350px] animate-scale-in"
-          style={{
-            left: `${popover.x}px`,
-            top: `${popover.y}px`,
-            transform: popover.isFlipped ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
-            marginTop: popover.isFlipped ? '0' : '-10px'
-          }}
-          onMouseDown={e => e.stopPropagation()}
-          onMouseUp={e => e.stopPropagation()}
-          onTouchStart={e => e.stopPropagation()}
-          onTouchEnd={e => e.stopPropagation()}
+        <div 
+          className={`fixed inset-0 z-[1000] pointer-events-none ${window.innerWidth < 640 ? 'flex items-end' : ''}`}
         >
-          <div className="flex items-start justify-between border-b border-slate-100 pb-2 mb-1 gap-4">
-            <span className="font-bold text-slate-800 text-sm max-h-20 overflow-y-auto w-full leading-tight pr-2">{popover.text}</span>
-            <button onClick={() => { window.getSelection()?.removeAllRanges(); setPopover(null); }} className="text-slate-400 hover:text-slate-600 shrink-0">
-              <i className="fas fa-times"></i>
-            </button>
-          </div>
+          {/* Overlay for mobile to dismiss */}
+          {window.innerWidth < 640 && (
+            <div 
+              className="absolute inset-0 bg-black/20 backdrop-blur-[2px] pointer-events-auto animate-fade-in"
+              onClick={() => { window.getSelection()?.removeAllRanges(); setPopover(null); }}
+            />
+          )}
 
-          <div className="flex flex-col gap-2">
-            <div className="flex gap-2 w-full">
-              <select
-                className="border border-slate-200 rounded p-1 text-xs shrink-0 bg-slate-50 font-bold text-slate-700"
-                value={targetLang}
-                onChange={(e) => setTargetLang(e.target.value)}
+          <div
+            id="selection-popover"
+            className={`
+              pointer-events-auto bg-white/95 backdrop-blur-md shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-white/20
+              flex flex-col gap-3 transition-all duration-300 animate-scale-in
+              ${window.innerWidth < 640 
+                ? 'w-full rounded-t-3xl p-6 pb-10 border-t-2 border-blue-500/20' 
+                : 'absolute rounded-2xl p-4 min-w-[300px] max-w-[350px] border border-slate-200'}
+            `}
+            style={window.innerWidth < 640 ? {} : {
+              left: `${popover.x}px`,
+              top: `${popover.y}px`,
+              transform: popover.isFlipped ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
+              marginTop: popover.isFlipped ? '0' : '-12px'
+            }}
+            onMouseDown={e => e.stopPropagation()}
+            onMouseUp={e => e.stopPropagation()}
+            onTouchStart={e => e.stopPropagation()}
+            onTouchEnd={e => e.stopPropagation()}
+          >
+            {/* Mobile Handle */}
+            {window.innerWidth < 640 && (
+              <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4" />
+            )}
+
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3 mb-1 gap-4">
+              <div className="flex flex-col">
+                <label className="text-[10px] uppercase text-blue-500 font-bold tracking-wider mb-1">Seçilen Kelime</label>
+                <span className="font-extrabold text-slate-900 text-lg sm:text-base leading-tight pr-2">{popover.text}</span>
+              </div>
+              <button 
+                onClick={() => { window.getSelection()?.removeAllRanges(); setPopover(null); }} 
+                className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors shrink-0"
               >
-                <option value="tr">TR'ye</option>
-                <option value="en">EN'ye</option>
-                <option value="de">DE'ye</option>
-              </select>
-              <button
-                onClick={handleTranslateWord}
-                disabled={isTranslating}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 py-2 rounded text-sm font-bold flex-1 flex items-center justify-center gap-2 transition"
-              >
-                {isTranslating ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-language"></i>}
-                Çevir
+                <i className="fas fa-times"></i>
               </button>
             </div>
 
-            {translationText && (
-              <div className="p-2 bg-slate-50 rounded border border-slate-100 text-sm text-slate-700 leading-tight max-h-32 overflow-y-auto">
-                {translationText}
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-2 w-full">
+                <div className="relative flex-1">
+                  <i className="fas fa-globe absolute left-3 top-1/2 -translate-y-1/2 text-blue-400 text-xs"></i>
+                  <select
+                    className="w-full border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-sm bg-slate-50 font-bold text-slate-700 appearance-none focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                    value={targetLang}
+                    onChange={(e) => setTargetLang(e.target.value)}
+                  >
+                    <option value="tr">Türkçe'ye</option>
+                    <option value="en">English'e</option>
+                    <option value="de">Deutsch'a</option>
+                  </select>
+                </div>
+                <button
+                  onClick={handleTranslateWord}
+                  disabled={isTranslating}
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-slate-400 disabled:to-slate-500 text-white px-5 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-500/20 active:scale-95"
+                >
+                  {isTranslating ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-magic"></i>}
+                  Çevir
+                </button>
               </div>
-            )}
 
-            <div className="flex flex-col gap-1 mt-1">
-              <label className="text-[10px] uppercase text-slate-400 font-bold">Hedef Defter</label>
-              <select
-                className="text-xs p-1 border border-slate-200 rounded bg-white"
-                value={targetNotebookId}
-                onChange={(e) => setTargetNotebookId(e.target.value)}
+              {translationText && (
+                <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100/50 text-sm md:text-base text-slate-800 leading-relaxed max-h-32 overflow-y-auto animate-fade-in relative group">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-blue-400 rounded-l-xl"></div>
+                  {translationText}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1.5 mt-2">
+                <div className="flex items-center justify-between px-1">
+                  <label className="text-[10px] uppercase text-slate-400 font-bold tracking-widest">Hedef Kelime Defteri</label>
+                  {notebooks.length === 0 && <span className="text-[10px] text-red-400 font-bold">Defter Bulunamadı</span>}
+                </div>
+                <div className="relative">
+                  <i className="fas fa-book absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                  <select
+                    className="w-full text-sm p-2.5 pl-9 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-green-500/10 outline-none transition-all font-medium text-slate-700 appearance-none shadow-sm"
+                    value={targetNotebookId}
+                    onChange={(e) => setTargetNotebookId(e.target.value)}
+                  >
+                    {notebooks.length > 0 ? (
+                      notebooks.map(nb => <option key={nb.id} value={nb.id}>{nb.title}</option>)
+                    ) : (
+                      <option value="">Lütfen Defter Seçin</option>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              <button
+                onClick={handleAddWordToVocab}
+                className="mt-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-4 py-3 rounded-2xl text-base font-bold flex items-center justify-center gap-3 transition-all shadow-xl shadow-green-500/20 active:scale-[0.98]"
               >
-                {notebooks.length > 0 ? (
-                  notebooks.map(nb => <option key={nb.id} value={nb.id}>{nb.title}</option>)
-                ) : (
-                  <option value="">Defter Yok</option>
-                )}
-              </select>
+                <i className="fas fa-plus-circle text-lg"></i>
+                Deftere Ekle
+              </button>
             </div>
 
-            <button
-              onClick={handleAddWordToVocab}
-              className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm font-bold flex items-center justify-center gap-2 transition"
-            >
-              <i className="fas fa-plus"></i>
-              Deftere Ekle
-            </button>
+            {/* Arrow (Only on Desktop) */}
+            {window.innerWidth >= 640 && (
+              <div 
+                className={`absolute left-1/2 -translate-x-1/2 w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent transition-all
+                  ${popover.isFlipped 
+                    ? 'border-b-[10px] border-b-white/95 -top-[10px]' 
+                    : 'border-t-[10px] border-t-white/95 -bottom-[10px]'}`}
+              ></div>
+            )}
           </div>
-
-          {/* Arrow */}
-          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-white"></div>
         </div>
       )}
     </div>
