@@ -299,6 +299,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   const [jumpTarget, setJumpTarget] = useState("");
 
   // --- PINCH ZOOM STATE (Advanced Focal Point) ---
+  const isZooming = useRef(false); // NEW: Track zoom activity to block scroll tracking
   const touchStartDist = useRef<number | null>(null);
   const touchStartScale = useRef<number>(1);
   const touchFocalPoint = useRef<{ x: number, y: number, scrollX: number, scrollY: number } | null>(null);
@@ -325,6 +326,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       const center = getTouchCenter(e);
 
       if (dist && center) {
+        isZooming.current = true; // Lock scroll tracking
         touchStartDist.current = dist;
         touchStartScale.current = scale;
         // Capture center relative to the container VIEWPORT (not content)
@@ -397,18 +399,9 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
       // Valid Ratio applied
       const ratio = newScale / oldScale;
 
-      // Reset CSS
-      contentRef.current.style.transition = '';
-      contentRef.current.style.transform = '';
-      contentRef.current.style.transformOrigin = '';
-
       // Update State
       if (newScale !== oldScale) {
-        setScale(newScale);
-
         // ADJUST SCROLL to keep partial stability
-        // Formula: newScroll = (oldScroll + focal) * ratio - focal
-
         const rect = containerRef.current.getBoundingClientRect();
         const fx = touchFocalPoint.current.x - rect.left;
         const fy = touchFocalPoint.current.y - rect.top;
@@ -420,14 +413,33 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         let newScrollTop = (oldScrollTop + fy) * ratio - fy;
         const newScrollLeft = (oldScrollLeft + fx) * ratio - fx;
 
-        // REMOVED STRICT BOUNDARY CLAMPING for vertical scroll freedom
-        // But we might want some horizontal clamping if needed?
-        // Layout 'w-fit mx-auto' handles horizontal centering effectively.
-        // Vertical, we just let it be.
+        // Sync State
+        setScale(newScale);
 
-        // Apply Scroll immediately
-        containerRef.current.scrollTop = newScrollTop;
-        containerRef.current.scrollLeft = newScrollLeft;
+        // Apply Scroll immediately after state update (next tick)
+        // We keep the transform for 1 frame to avoid the white flash/jump
+        requestAnimationFrame(() => {
+          if (containerRef.current) {
+            containerRef.current.scrollTop = newScrollTop;
+            containerRef.current.scrollLeft = newScrollLeft;
+            
+            // Clean up visual transform only after scroll is set
+            setTimeout(() => {
+              if (contentRef.current) {
+                contentRef.current.style.transition = '';
+                contentRef.current.style.transform = '';
+                contentRef.current.style.transformOrigin = '';
+                isZooming.current = false; // Release lock
+              }
+            }, 100);
+          }
+        });
+      } else {
+        // Reset CSS if no change
+        contentRef.current.style.transition = '';
+        contentRef.current.style.transform = '';
+        contentRef.current.style.transformOrigin = '';
+        isZooming.current = false; // Release lock
       }
 
       touchStartDist.current = null;
@@ -663,7 +675,15 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
   const handleWheel = (e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
-      handleZoom(e.deltaY > 0 ? -0.1 : 0.1);
+      // Focal point is the mouse position relative to the container
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (rect) {
+        const focalPoint = {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        };
+        handleZoom(e.deltaY > 0 ? -0.2 : 0.2, focalPoint);
+      }
     }
   };
 
@@ -688,7 +708,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
   // Scroll-based Page Detection (Replaces IntersectionObserver for robustness)
   const updateCurrentPage = () => {
-    if (!containerRef.current || !numPages) return;
+    if (!containerRef.current || !numPages || isZooming.current) return;
 
     // Calculate the "center" of the view
     const container = containerRef.current;
@@ -868,8 +888,46 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
 
   // REMOVED IntersectionObserver - Replaced by Scroll Tracking in handleScroll
 
-  const handleZoom = (delta: number) => {
-    setScale(prev => Math.min(Math.max(0.5, prev + delta), 3.0));
+  const handleZoom = (delta: number, focalPoint?: { x: number, y: number }) => {
+    if (!containerRef.current) return;
+    
+    isZooming.current = true; // Lock scroll tracking
+
+    setScale(prev => {
+      const oldScale = prev;
+      const newScale = Math.min(Math.max(0.25, oldScale + delta), 4.0); // Expanded range for better feel
+      
+      if (oldScale === newScale) {
+        isZooming.current = false;
+        return oldScale;
+      }
+
+      const ratio = newScale / oldScale;
+      const container = containerRef.current!;
+
+      // Determine focal point (viewport coordinates)
+      const fx = focalPoint ? focalPoint.x : container.clientWidth / 2;
+      const fy = focalPoint ? focalPoint.y : container.clientHeight / 2;
+
+      const oldScrollTop = container.scrollTop;
+      const oldScrollLeft = container.scrollLeft;
+
+      // Formula: newScroll = (oldScroll + viewportPos) * ratio - viewportPos
+      const newScrollTop = (oldScrollTop + fy) * ratio - fy;
+      const newScrollLeft = (oldScrollLeft + fx) * ratio - fx;
+
+      // Apply scroll in next tick
+      setTimeout(() => {
+        if (containerRef.current) {
+          containerRef.current.scrollTop = newScrollTop;
+          containerRef.current.scrollLeft = newScrollLeft;
+          // Short delay before unlocking to allow virtualization to settle
+          setTimeout(() => { isZooming.current = false; }, 200);
+        }
+      }, 0);
+
+      return newScale;
+    });
   };
 
   const [isPrinting, setIsPrinting] = useState(false);
@@ -1151,7 +1209,7 @@ const UserViewer: React.FC<UserViewerProps> = ({ book, accessKey, isDeviceVerifi
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
-        <div ref={contentRef} className="flex flex-col min-w-full items-stretch transition-transform duration-75 origin-top-left"> {/* Inner Wrapper for Transform */}
+        <div ref={contentRef} className="flex flex-col min-w-full items-stretch origin-top-left"> {/* Inner Wrapper for Transform */}
           {!isFocused && <div className="fixed inset-0 z-[100] bg-black/50 text-white flex items-center justify-center text-2xl font-bold">Odaklanın</div>}
 
           {pdfUrl ? (
