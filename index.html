@@ -42,17 +42,20 @@
       -webkit-user-select: text !important;
       pointer-events: auto !important;
       z-index: 105; /* Above canvas in Cursor mode */
+      line-height: 1 !important; /* Prevent vertical overflow/overlap */
     }
     .react-pdf__Page__textContent span {
       pointer-events: auto !important;
       cursor: text !important;
       mix-blend-mode: multiply; /* Helps see selection against highlight colors */
       opacity: 1 !important; /* Ensure some browsers don't hide transparent selection text */
+      line-height: normal !important;
+      vertical-align: top;
     }
     
     /* Global selection color for high precision */
     ::selection {
-      background: rgba(37, 99, 235, 0.25); /* Light blue highlight */
+      background: rgba(37, 99, 235, 0.2); /* Light blue highlight */
     }
   </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">

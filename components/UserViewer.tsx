@@ -187,7 +187,7 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, width, height
         className="origin-top-left"
         style={{
           width: width,
-          height: width * 1.414, // Force internal layout height roughly
+          height: height ? height / displayScale : 'auto', // Use real height if available
           transform: `scale(${displayScale})`
         }}
       >
@@ -200,20 +200,17 @@ const SinglePDFPage: React.FC<SinglePDFPageProps> = ({ pageNumber, width, height
           renderTextLayer={true}
           onLoadSuccess={handlePageLoadSuccess}
           onRenderError={(err) => console.error(`Page ${pageNumber} Render Error:`, err)}
-          loading={<div className="bg-white w-full" style={{ height: width * 1.41 }} />} // Removed pulse for stability
+          loading={<div className="bg-white w-full" style={{ height: width * 1.41 }} />} 
           error={<div className="flex items-center justify-center text-red-400 h-96">Sayfa Yüklenemedi</div>}
         />
         {/* Canvas moved outside Page component to ensure it sits on top of TextLayer */}
         <canvas
           ref={canvasRef}
           className={`absolute inset-0 z-[100] ${toolMode === 'CURSOR' ? 'pointer-events-none' : 'cursor-crosshair touch-none'}`}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-          onTouchStart={startDrawing}
-          onTouchMove={draw}
-          onTouchEnd={stopDrawing}
+          onPointerDown={startDrawing}
+          onPointerMove={draw}
+          onPointerUp={stopDrawing}
+          onPointerLeave={stopDrawing}
         />
       </div>
     </div>
